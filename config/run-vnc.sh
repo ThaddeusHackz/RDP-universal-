@@ -46,6 +46,8 @@ if [ ! -s "$PASSWD_FILE" ]; then
 fi
 
 echo "[thadd-desktop] starting $VNCBIN on :1 (${RESOLUTION:-1600x900})"
+# NOTE: -rfbwait was removed in TigerVNC 1.12 (Debian 12) — passing it makes
+# Xvnc abort with "Unrecognized option". Do not re-add it.
 "$VNCBIN" :1 \
     -geometry "${RESOLUTION:-1600x900}" \
     -depth 24 \
@@ -54,7 +56,6 @@ echo "[thadd-desktop] starting $VNCBIN on :1 (${RESOLUTION:-1600x900})"
     -localhost \
     -AlwaysShared \
     -desktop "THADD OS" \
-    -rfbwait 30000 \
     >/tmp/xvnc.log 2>&1 &
 XVNC_PID=$!
 
