@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Plank Dock
+Comment=THADD OS dock
+Exec=sh -c 'sleep 3; plank'
+Icon=utilities-terminal
+Terminal=false
+X-GNOME-Autostart-enabled=true

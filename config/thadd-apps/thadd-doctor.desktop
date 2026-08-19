@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=THADD Doctor
+Comment=Run the THADD OS self-diagnostic
+Exec=xfce4-terminal --hide-menubar --hide-toolbar --title="THADD Doctor" -e "thadd doctor"
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Diagnostics;
