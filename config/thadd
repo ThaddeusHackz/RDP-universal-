@@ -1,0 +1,93 @@
+#!/bin/bash
+# =============================================================================
+#  THADD OS control center — `thadd`
+#    thadd            system info (neofetch with the THADD logo)
+#    thadd doctor     full self-diagnostic
+#    thadd welcome    welcome banner
+#    thadd help       this help
+# =============================================================================
+set -u
+
+C0='\033[0m'; CB='\033[1m'; CC='\033[0;36m'; CV='\033[0;35m'; CG='\033[0;32m'
+CR='\033[0;31m'; CY='\033[0;33m'; CD='\033[0;90m'
+
+logo() {
+cat <<'EOF'
+████████╗██╗  ██╗ █████╗ ██████╗ ██████╗     ██████╗ ███████╗
+╚══██╔══╝██║  ██║██╔══██╗██╔══██╗██╔══██╗    ██╔═══██╗╚════██║
+   ██║   ███████║███████║██║  ██║██║  ██║    ██║   ██║    ██╔╝
+   ██║   ██╔══██║██╔══██║██║  ██║██║  ██║    ██║   ██║   ██╔╝
+   ██║   ██║  ██║██║  ██║██████╔╝██████╔╝    ╚██████╔╝  ██╔╝
+   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═════╝      ╚═════╝   ╚═╝
+EOF
+}
+
+facts() {
+    local up mem disk swap host kernel
+    host="$(hostname 2>/dev/null || echo thadd-os)"
+    kernel="$(uname -r 2>/dev/null)"
+    up="$(awk '{d=int($1/86400);h=int(($1%86400)/3600);m=int(($1%3600)/60);printf "%dd %dh %dm",d,h,m}' /proc/uptime 2>/dev/null)"
+    mem="$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "%.0f MB used of %.0f MB", (t-a)/1024, t/1024}' /proc/meminfo 2>/dev/null)"
+    disk="$(df -h / | awk 'NR==2{print $3" used of "$2" ("$5")"}' 2>/dev/null)"
+    swap="$(awk '/SwapTotal/{t=$2}/SwapFree/{f=$2}END{if(t>0)printf "%.0f MB used of %.0f MB",(t-f)/1024,t/1024; else print "off"}' /proc/meminfo 2>/dev/null)"
+    printf '%b\n' \
+        "${CB}${CC}  ${host}${C0} — ${CY}One OS. All the Best.${C0}" \
+        "${CD}  kernel ${C0}${kernel}   ${CD}uptime ${C0}${up}" \
+        "${CD}  memory ${C0}${mem}   ${CD}swap ${C0}${swap}" \
+        "${CD}  disk   ${C0}${disk}" \
+        "${CD}  try    ${C0}thadd doctor · neofetch · btop · thadd help"
+}
+
+doctor() {
+    printf '%b\n' "${CB}THADD OS — system doctor${C0}\n"
+    chk() { # chk <label> <condition>
+        if eval "$2" >/dev/null 2>&1; then printf '%b\n' "  ${CG}✔${C0} $1"; else printf '%b\n' "  ${CR}✘${C0} $1"; fi
+    }
+    chk "portal (nginx)          " "curl -fsS --max-time 4 http://127.0.0.1:${PORT:-8080}/healthz"
+    chk "RDP server (xrdp)       " "(exec 3<>/dev/tcp/127.0.0.1/3389)"
+    chk "browser desktop (Xvnc)  " "pgrep -x Xvnc"
+    chk "desktop session (xfce4) " "pgrep -f xfce4-session"
+    chk "dock (plank)            " "pgrep -x plank"
+    chk "session manager (sesman)" "pgrep -x xrdp-sesman"
+    chk "websocket bridge        " "pgrep -f websockify"
+    chk "system bus (dbus)       " "pgrep -x dbus-daemon"
+    local memfree
+    memfree="$(awk '/MemAvailable/{printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null)"
+    printf '%b\n' "  ${CD}available memory: ${C0}${memfree} MB"
+    printf '%b\n' "  ${CD}ip addresses:     ${C0}$(hostname -I 2>/dev/null | tr -s ' ')"
+    printf '%b\n' "\n${CY}All systems are supervised and auto-restart forever.${C0}"
+}
+
+welcome() {
+    logo
+    facts
+    printf '%b\n' \
+        "" \
+        "${CB}Welcome to ${CC}THADD OS${C0} — One OS. All the Best." \
+        "This desktop unites the finest ideas from the Linux world into one" \
+        "lightweight, always-on system you can reach from anywhere." \
+        "" \
+        "  ${CG}•${C0} Browser:  the portal you came from — no software needed" \
+        "  ${CG}•${C0} RDP:      any RDP client → this host, port 3389" \
+        "  ${CG}•${C0} Look:     XFCE + Arc-Dark + Papirus + Plank + conky" \
+        "  ${CG}•${C0} Tools:    Firefox ESR, btop, neofetch, git, sudo, htop…" \
+        "" \
+        "  ${CD}Type 'thadd help' for commands. Docs on the Desktop.${C0}"
+}
+
+usage() {
+    printf '%b\n' \
+        "${CB}thadd — THADD OS control center${C0}" \
+        "  thadd          system overview" \
+        "  thadd doctor   full self-diagnostic of every service" \
+        "  thadd welcome  show the welcome banner" \
+        "  thadd help     this help"
+}
+
+case "${1:-info}" in
+    info)      logo; facts ;;
+    doctor)    doctor ;;
+    welcome)   welcome ;;
+    help|-h|--help) usage ;;
+    *)         usage ;;
+esac

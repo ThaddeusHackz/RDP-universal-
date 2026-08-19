@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Conky HUD
+Comment=THADD OS desktop system monitor
+Exec=sh -c 'sleep 5; conky -c "$HOME/.config/conky/conky.conf"'
+Icon=utilities-system-monitor
+Terminal=false
+X-GNOME-Autostart-enabled=true

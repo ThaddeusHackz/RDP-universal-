@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THADD OS — One OS. All the Best.</title>
+<meta name="description" content="THADD OS — a universal Linux desktop that lives in the cloud. Open it in your browser or with any RDP client.">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="stars" aria-hidden="true"></div>
+<div class="aurora" aria-hidden="true">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+</div>
+
+<nav class="nav">
+  <div class="brand">
+    <img src="/logo.png" alt="THADD OS logo" class="brand-logo">
+    <div>
+      <div class="brand-name">THADD&nbsp;OS</div>
+      <div class="brand-tag">One OS. All the Best.</div>
+    </div>
+  </div>
+  <div class="status-pill" id="statusPill">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">Connecting…</span>
+  </div>
+</nav>
+
+<main>
+  <section class="hero">
+    <h1>Your Linux desktop,<br><span class="grad">always on. Anywhere.</span></h1>
+    <p class="lede">
+      THADD OS unites the finest ideas of the Linux world — Debian's lightness and
+      stability, Ubuntu's usability, elementary's elegance, Arch's minimalism — into one
+      always-on operating system running in the cloud.
+    </p>
+  </section>
+
+  <section class="cards">
+    <div class="card">
+      <div class="card-icon">🌐</div>
+      <h2>Browser Desktop</h2>
+      <p>Open the full desktop instantly — no installs, no plugins. Works on any device with a browser.</p>
+      <a class="btn btn-primary" href="/vnc/vnc.html?autoconnect=1&resize=scale&reconnect=1&reconnect_delay=2000&path=websockify&show_dot=true">
+        Open Desktop in Browser →
+      </a>
+      <p class="hint">Enter the username &amp; password shown below when prompted.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">🖥️</div>
+      <h2>Native RDP</h2>
+      <p>Connect with <strong>Microsoft Remote Desktop</strong>, Remmina, FreeRDP or any RDP client.</p>
+      <table class="creds" id="credsTable">
+        <tr><td>Host</td><td><code id="rdpHost">your TCP-proxy domain (Railway)</code></td></tr>
+        <tr><td>Port</td><td><code id="rdpPort">3389</code></td></tr>
+        <tr><td>Username</td><td><code id="rdpUser">thadd</code></td></tr>
+        <tr><td>Password</td><td><code id="rdpPass">••••••</code></td></tr>
+      </table>
+      <button class="btn btn-ghost" id="copyBtn" type="button">Copy credentials</button>
+      <p class="hint">On Railway: Settings → Networking → TCP Proxy → port 3389.</p>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature"><span>🚀</span><h3>Instant access</h3><p>Browser or RDP — the same OS, live in seconds.</p></div>
+    <div class="feature"><span>🪶</span><h3>Debian-light</h3><p>Idles at ~300 MB RAM; a full browser session stays snappy.</p></div>
+    <div class="feature"><span>🎨</span><h3>Curated beauty</h3><p>XFCE + Arc-Dark + Papirus + Plank + conky, tuned to the pixel.</p></div>
+    <div class="feature"><span>🔁</span><h3>Self-healing</h3><p>Healthchecks and auto-restart keep THADD OS alive forever.</p></div>
+    <div class="feature"><span>💾</span><h3>Persistent</h3><p>Your home directory lives on a Railway volume — files survive restarts.</p></div>
+    <div class="feature"><span>🕵️</span><h3>CI-verified</h3><p>Every push builds the OS and logs in over real RDP before it ships.</p></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>THADD OS 1.0 (Nebula) · built on Debian 12 · XFCE 4.18 · xrdp · noVNC</span>
+  <a href="https://github.com/ThaddeusHackz/RDP-universal-" target="_blank" rel="noopener">GitHub →</a>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

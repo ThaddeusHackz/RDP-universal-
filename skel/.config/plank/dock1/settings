@@ -1,0 +1,14 @@
+[PlankDockPreferences]
+#THADD OS dock — the curated launcher bar
+DockItems=firefox.dockitem;;files.dockitem;;terminal.dockitem;;monitor.dockitem;;settings.dockitem;;logout.dockitem;;
+Position=bottom
+Offset=0
+Alignment=center
+IconSize=52
+ZoomEnabled=true
+ZoomPercent=130
+UnhideDelay=0
+HideDelay=0
+ShowDockItem=true
+LockItems=true
+TooltipsEnabled=true

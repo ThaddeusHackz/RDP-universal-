@@ -1,0 +1,7 @@
+# local scratch
+node_modules/
+*.log
+.tmp/
+
+# keep the CI-published screenshot in the repo
+!ci/thadd-os-screenshot.jpg
