@@ -67,7 +67,10 @@ def x224_crq_with_negotiation():
     tpkt_len = 4 + 7 + 8  # TPKT + X.224 CRQ fixed + RDP NEG request
     tpkt = b"\x03\x00" + struct.pack(">H", tpkt_len)
     # X.224 Connection Request: LI, code(0xE0), dst-ref(2), src-ref(2), class(1)
-    x224 = b"\x06\xe0\x00\x00\x00\x00\x00"
+    # LI = bytes following the LI octet = 6 (fixed CR fields) + 8 (piggybacked
+    # RDP NEG request) = 14. mstsc/FreeRDP send 0x0E; anything smaller is
+    # malformed (xrdp: 'Invalid length indicator … expected 14, received 6').
+    x224 = b"\x0e\xe0\x00\x00\x00\x00\x00"
     # RDP Negotiation Request: type=1, flags=0, len=8, requested=SSL|HYBRID
     neg = b"\x01\x00\x08\x00\x03\x00\x00\x00"
     return tpkt + x224 + neg
