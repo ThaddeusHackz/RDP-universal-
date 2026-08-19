@@ -11,8 +11,10 @@ the exact wire bytes, so the root cause is readable from the run summary
 even when raw action logs are unavailable.
 """
 import os
+import shutil
 import socket
 import struct
+import subprocess
 import sys
 
 HOST = "127.0.0.1"
@@ -33,9 +35,30 @@ def annotate(title, body):
     print(f"::error title={title}::{body[:3000]}", flush=True)
 
 
+def dump_container_diagnostics():
+    """Surface in-container xrdp forensics as workflow annotations on failure."""
+    if not shutil.which("docker"):
+        return
+    probes = {
+        "xrdp.log tail": "docker exec thadd sh -c 'tail -n 40 /var/log/xrdp.log 2>&1'",
+        "xrdp-sesman.log tail": "docker exec thadd sh -c 'tail -n 40 /var/log/xrdp-sesman.log 2>&1'",
+        "cert material": "docker exec thadd sh -c 'ls -la /etc/xrdp/ 2>&1; grep -E \"^(certificate|key_file|security_layer|crypt_level)=\" /etc/xrdp/xrdp.ini 2>&1; openssl x509 -in /etc/xrdp/cert.pem -noout -subject -dates 2>&1'",
+        "xrdp listeners": "docker exec thadd sh -c 'ss -tlnp 2>/dev/null | grep -E \"3389|3350\" || true'",
+    }
+    for title, cmd in probes.items():
+        try:
+            out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=45)
+            body = (out.stdout + out.stderr).strip()
+        except Exception as e:
+            body = f"probe failed: {e}"
+        if body:
+            annotate(f"THADD-CI rdp diag: {title}", body)
+
+
 def fail(title, detail):
     print(f"FAIL — {detail}", flush=True)
     annotate(title, detail)
+    dump_container_diagnostics()
     sys.exit(1)
 
 
@@ -97,6 +120,7 @@ def main():
     print("  verdict:", verdict, flush=True)
     if not verdict.startswith("OK"):
         annotate("THADD-CI rdp negotiation", verdict)
+        dump_container_diagnostics()
         sys.exit(1)
     print("✅ xrdp speaks RDP and negotiated a secure connection", flush=True)
 
