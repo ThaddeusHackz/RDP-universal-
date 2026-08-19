@@ -29,6 +29,8 @@ It is designed to impress: the first thing you see is a polished, curated deskto
 
 ## 📸 Proof it works
 
+> ⚠️ **One-time step:** this repo's CI suite ships at [`ci/thadd-os-ci.yml.example`](ci/thadd-os-ci.yml.example) because GitHub requires a *workflows* write permission that some GitHub connections don't grant. Enable it in ~20 seconds with the [`ci/ENABLE-CI.md`](ci/ENABLE-CI.md) guide, and from then on every push is verified end-to-end.
+
 Every push to this repo triggers a full end-to-end test that **logs into the running OS over a real RDP connection** and commits a screenshot of the live desktop back to the repo:
 
 <p align="center"><img src="ci/thadd-os-screenshot.jpg" alt="THADD OS desktop, captured over RDP during CI" width="640"></p>
