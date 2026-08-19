@@ -45,7 +45,7 @@ doctor() {
     }
     chk "portal (nginx)          " "curl -fsS --max-time 4 http://127.0.0.1:${PORT:-8080}/healthz"
     chk "RDP server (xrdp)       " "(exec 3<>/dev/tcp/127.0.0.1/3389)"
-    chk "browser desktop (Xvnc)  " "pgrep -x Xvnc"
+    chk "browser desktop (Xvnc)  " "pgrep -x Xvnc || pgrep -x Xtigervnc"
     chk "desktop session (xfce4) " "pgrep -f xfce4-session"
     chk "dock (plank)            " "pgrep -x plank"
     chk "session manager (sesman)" "pgrep -x xrdp-sesman"

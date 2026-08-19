@@ -17,12 +17,13 @@ LABEL org.opencontainers.image.title="THADD OS" \
       org.opencontainers.image.description="Universal lightweight Linux desktop — browser + RDP access" \
       org.opencontainers.image.version="1.0.0"
 
+# NOTE: credentials (THADD_PASSWORD / THADD_ROOT_PASSWORD) are intentionally
+# NOT baked in as ENV — BuildKit flags SecretsUsedInArgOrEnv and they would
+# leak into image metadata. The entrypoint supplies runtime defaults instead.
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     THADD_USER=thadd \
-    THADD_PASSWORD=thadd \
-    THADD_ROOT_PASSWORD= \
     RESOLUTION=1600x900 \
     PORT=8080 \
     SWAP_MB=512
@@ -54,8 +55,12 @@ RUN apt-get update && apt-get install -y \
 #   xrdp (RDP server) · TigerVNC (desktop renderer) · noVNC + websockify
 #   (browser desktop) · nginx (portal/edge) · supervisor (orchestrator)
 # ---------------------------------------------------------------------------
+# tigervnc-tools is CRITICAL: it owns `vncpasswd`, which the entrypoint uses
+# to provision the browser-desktop password. On Debian 12 the package is only
+# a Recommends of tigervnc-standalone-server, so --no-install-recommends drops
+# it — without it the entrypoint crashed with "vncpasswd: command not found".
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xrdp tigervnc-standalone-server \
+      xrdp tigervnc-standalone-server tigervnc-common tigervnc-tools \
       novnc websockify \
       nginx supervisor \
       firefox-esr \
@@ -87,7 +92,7 @@ RUN sed -i \
       -e 's/^crypt_level=.*/crypt_level=high/' \
       -e 's/^security_layer=.*/security_layer=negotiate/' \
       /etc/xrdp/xrdp.ini \
- && (xrdp-keygen xrdp /etc/xrdp/key.pem >/dev/null 2>&1 || true) \
+ && (xrdp-keygen xrdp /etc/xrdp/rsakeys.ini >/dev/null 2>&1 || true) \
  && rm -f /etc/nginx/sites-enabled/default \
  && mkdir -p /opt/thadd/web /usr/share/backgrounds/thadd-os
 
