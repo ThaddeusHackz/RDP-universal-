@@ -65,6 +65,7 @@ envsubst '${PORT}' \
   > /etc/nginx/sites-enabled/thadd.conf
 
 # Portal credentials endpoint (regenerated at every boot)
+mkdir -p /opt/thadd
 cat > /opt/thadd/credentials.json <<EOF
 {
   "os": "THADD OS",

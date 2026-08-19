@@ -11,6 +11,7 @@ import base64
 import json
 import os
 import socket
+import struct
 import sys
 import urllib.request
 
@@ -29,6 +30,26 @@ def check(name, cond, extra=""):
 def get(path):
     with urllib.request.urlopen(f"http://{HOST}:{PORT}{path}", timeout=10) as r:
         return r.status, r.read()
+
+
+def read_ws_frame(sock, timeout=15):
+    """Read one server→client WebSocket frame and return its payload."""
+    sock.settimeout(timeout)
+    hdr = sock.recv(2)
+    if len(hdr) < 2:
+        return b""
+    length = hdr[1] & 0x7F
+    if length == 126:
+        length = struct.unpack(">H", sock.recv(2))[0]
+    elif length == 127:
+        length = struct.unpack(">Q", sock.recv(8))[0]
+    data = b""
+    while len(data) < length:
+        chunk = sock.recv(length - len(data))
+        if not chunk:
+            break
+        data += chunk
+    return data
 
 
 def ws_handshake(path):
@@ -53,7 +74,7 @@ def ws_handshake(path):
         resp += chunk
     assert b"101" in resp.split(b"\r\n")[0], f"no upgrade: {resp[:200]!r}"
     # websockify bridges us straight to Xvnc:1 → first bytes are the RFB banner
-    data = s.recv(64)
+    data = read_ws_frame(s)
     s.close()
     return data
 

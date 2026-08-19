@@ -8,12 +8,13 @@ xrdp answers with an X.224 Connection Confirm + RDP Negotiation Response.
 
 Pure stdlib.
 """
+import os
 import socket
 import struct
 import sys
 
 HOST = "127.0.0.1"
-PORT = 3389
+PORT = int(os.environ.get("RDP_PORT", "3389"))
 
 
 def x224_crq_with_negotiation():
@@ -34,9 +35,9 @@ def main():
     data = s.recv(4096)
     s.close()
 
-    # X.224 Connection Confirm: TPKT(3 00 len) + LI + 0xD0 …
+    # X.224 Connection Confirm: TPKT(03 00 len len) + LI + 0xD0 …
     # RDP Negotiation Response: type byte 0x02 appears right after the X.224 CC
-    is_tpkt = len(data) >= 4 and data[:3] == b"\x03\x00"
+    is_tpkt = len(data) >= 4 and data[:2] == b"\x03\x00"
     is_cc = len(data) >= 6 and data[5] == 0xD0
     has_neg_response = b"\x02\x00" in data[8:24] or b"\x02" in data[8:16]
 
