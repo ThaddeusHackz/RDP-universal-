@@ -5,3 +5,7 @@ node_modules/
 
 # keep the CI-published screenshot in the repo
 !ci/thadd-os-screenshot.jpg
+
+# python
+__pycache__/
+*.pyc
