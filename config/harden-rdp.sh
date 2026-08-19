@@ -141,6 +141,7 @@ mkdir -p /opt/thadd
 cat > /opt/thadd/login-status.json <<EOF
 {
   "user": "$(json_escape "$THADD_USER")",
+  "build": "$(json_escape "$(cat /etc/thadd-build 2>/dev/null || echo unknown)")",
   "password_set": ${password_set},
   "vnc_passwd": ${vnc_passwd},
   "pam_hardened": ${pam_ok},

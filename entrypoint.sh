@@ -9,6 +9,7 @@ set -euo pipefail
 
 export THADD_USER="${THADD_USER:-thadd}"
 export THADD_PASSWORD="${THADD_PASSWORD:-thadd}"
+export THADD_BUILD="$(cat /etc/thadd-build 2>/dev/null || echo unknown)"
 export THADD_ROOT_PASSWORD="${THADD_ROOT_PASSWORD:-}"
 export RESOLUTION="${RESOLUTION:-1600x900}"
 export PORT="${PORT:-8080}"
@@ -68,7 +69,23 @@ fi
 # -------------------------------------------------------- profile safeguards
 # Runs on EVERY boot (not only fresh seeds) so a stale or hand-populated
 # volume can't break the persistent browser desktop.
-[ -f "$HOME_DIR/.vnc/xstartup" ] && chmod +x "$HOME_DIR/.vnc/xstartup" || true
+#
+# SELF-HEAL: volumes mounted over /home/$THADD_USER may have been seeded by an
+# OLDER, broken image (the historical era of this repo shipped crash-loops and
+# dead session files). A stale ~/.vnc/xstartup kills the desktop right after a
+# perfectly good authentication — the classic "my password is correct but I
+# can't log in". Re-install the session bootstrap from the image on every
+# boot (it is OS plumbing, not user data), and top up anything else missing
+# without ever clobbering files the user has.
+install -d -m 700 -o "$THADD_USER" -g "$THADD_USER" "$HOME_DIR/.vnc"
+if [ -f /etc/skel/.vnc/xstartup ]; then
+    install -m 755 -o "$THADD_USER" -g "$THADD_USER" \
+        /etc/skel/.vnc/xstartup "$HOME_DIR/.vnc/xstartup"
+fi
+cp -an /etc/skel/. "$HOME_DIR/" 2>/dev/null || true
+# cp -a preserves root ownership of newly added files — hand the home back.
+chown -R "$THADD_USER":"$(id -gn "$THADD_USER" 2>/dev/null || echo "$THADD_USER")" \
+    "$HOME_DIR" 2>/dev/null || true
 
 # -------------------- VNC password (browser desktop) syncs with THADD_PASSWORD
 # `vncpasswd` lives in the tigervnc-tools package on Debian 12 (a mere
@@ -147,6 +164,7 @@ cat > /opt/thadd/credentials.json <<EOF
 {
   "os": "THADD OS",
   "version": "1.0.0 (Nebula)",
+  "build": "$(json_escape "$THADD_BUILD")",
   "username": "$(json_escape "$THADD_USER")",
   "password": "$(json_escape "$THADD_PASSWORD")",
   "rdp_port": 3389,
@@ -166,7 +184,7 @@ if [ "${SWAP_MB:-0}" -gt 0 ] && ! swapon --show 2>/dev/null | grep -q .; then
 fi
 
 # --------------------------------------------------------------- showtime
-log "THADD OS 1.0 (Nebula) is booting"
+log "THADD OS 1.0 (Nebula) is booting (build ${THADD_BUILD})"
 log "  Web desktop : 0.0.0.0:${PORT}   (noVNC — open in any browser)"
 log "  RDP         : 0.0.0.0:3389     (Microsoft Remote Desktop compatible)"
 log "  Login       : ${THADD_USER} / ${THADD_PASSWORD}"

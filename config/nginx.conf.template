@@ -34,6 +34,15 @@ server {
         add_header Cache-Control "no-store";
     }
 
+    # Live self-test: does THIS instance accept the credentials right now?
+    # Written every minute by the login-probe service; empty reasons +
+    # ready:true means a real RDP/VNC login with the portal creds will work.
+    location = /api/login-probe {
+        alias /opt/thadd/login-probe.json;
+        default_type application/json;
+        add_header Cache-Control "no-store";
+    }
+
     # noVNC web client
     location /vnc/ {
         alias /usr/share/novnc/;
