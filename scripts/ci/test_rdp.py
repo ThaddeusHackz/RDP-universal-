@@ -6,7 +6,9 @@ Sends a real X.224 Connection Request carrying an RDP Negotiation Request
 (the first packet Microsoft Remote Desktop / FreeRDP sends) and verifies
 xrdp answers with an X.224 Connection Confirm + RDP Negotiation Response.
 
-Pure stdlib.
+Pure stdlib. Every failure is emitted as a GitHub Actions annotation with
+the exact wire bytes, so the root cause is readable from the run summary
+even when raw action logs are unavailable.
 """
 import os
 import socket
@@ -15,6 +17,26 @@ import sys
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("RDP_PORT", "3389"))
+
+NEG_FAILURE_CODES = {
+    1: "SSL_REQUIRED_BY_SERVER",
+    2: "SSL_NOT_ALLOWED_BY_SERVER",
+    3: "SSL_CERT_NOT_ON_SERVER",
+    4: "INCONSISTENT_FLAGS",
+    5: "HYBRID_REQUIRED_BY_SERVER",
+    6: "SSL_WITH_USER_AUTH_FAILED",
+}
+
+
+def annotate(title, body):
+    body = body.replace("%", "%25").replace("\r", " ").replace("\n", "|")
+    print(f"::error title={title}::{body[:3000]}", flush=True)
+
+
+def fail(title, detail):
+    print(f"FAIL — {detail}", flush=True)
+    annotate(title, detail)
+    sys.exit(1)
 
 
 def x224_crq_with_negotiation():
@@ -28,26 +50,55 @@ def x224_crq_with_negotiation():
     return tpkt + x224 + neg
 
 
+def parse_reply(data: bytes) -> str:
+    """Classify xrdp's first reply into a human-readable verdict."""
+    hexs = data.hex(" ") if data else "(no data)"
+    if not data:
+        return "empty reply — xrdp closed the connection without answering"
+    if not (len(data) >= 4 and data[:2] == b"\x03\x00"):
+        return f"not a TPKT reply: {hexs}"
+    if len(data) < 6 or data[5] != 0xD0:
+        return f"TPKT but not an X.224 Connection Confirm: {hexs}"
+    # find the RDP negotiation structure after the X.224 CC header
+    if len(data) >= 13:
+        ntype = data[11]
+        if ntype == 0x02 and len(data) >= 19:
+            selected = struct.unpack("<I", data[15:19])[0]
+            proto = {1: "SSL/TLS", 2: "HYBRID (CredSSP/NLA)", 4: "RDSTLS"}.get(
+                selected, f"unknown({selected})"
+            )
+            return f"OK — RDP NEG RESPONSE, server selected {proto}"
+        if ntype == 0x03 and len(data) >= 19:
+            code = struct.unpack("<I", data[15:19])[0]
+            return (
+                "xrdp answered RDP NEG FAILURE: "
+                f"{NEG_FAILURE_CODES.get(code, f'code {code}')} — raw: {hexs}"
+            )
+    return f"X.224 CC but unrecognized negotiation payload: {hexs}"
+
+
 def main():
-    s = socket.create_connection((HOST, PORT), timeout=10)
+    try:
+        s = socket.create_connection((HOST, PORT), timeout=10)
+    except OSError as e:
+        fail("THADD-CI rdp", f"cannot connect to {HOST}:{PORT}: {e}")
     s.settimeout(15)
-    s.sendall(x224_crq_with_negotiation())
-    data = s.recv(4096)
-    s.close()
+    try:
+        s.sendall(x224_crq_with_negotiation())
+        data = s.recv(4096)
+    except OSError as e:
+        fail("THADD-CI rdp", f"socket error during negotiation: {e}")
+    finally:
+        s.close()
 
-    # X.224 Connection Confirm: TPKT(03 00 len len) + LI + 0xD0 …
-    # RDP Negotiation Response: type byte 0x02 appears right after the X.224 CC
-    is_tpkt = len(data) >= 4 and data[:2] == b"\x03\x00"
-    is_cc = len(data) >= 6 and data[5] == 0xD0
-    has_neg_response = b"\x02\x00" in data[8:24] or b"\x02" in data[8:16]
-
-    ok = is_tpkt and is_cc and has_neg_response
-    print("RDP negotiation:", "PASS" if ok else "FAIL")
-    print("  server reply head:", repr(data[:32]))
-    if not ok:
-        print("  tpkt:", is_tpkt, "| X.224 CC:", is_cc, "| NEG response:", has_neg_response)
+    verdict = parse_reply(data)
+    print("RDP negotiation:", "PASS" if verdict.startswith("OK") else "FAIL", flush=True)
+    print("  server reply head:", repr(data[:32]), flush=True)
+    print("  verdict:", verdict, flush=True)
+    if not verdict.startswith("OK"):
+        annotate("THADD-CI rdp negotiation", verdict)
         sys.exit(1)
-    print("✅ xrdp speaks RDP and negotiated a secure connection")
+    print("✅ xrdp speaks RDP and negotiated a secure connection", flush=True)
 
 
 if __name__ == "__main__":
