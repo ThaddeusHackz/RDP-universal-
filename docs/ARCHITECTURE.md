@@ -65,9 +65,12 @@ renderer + xrdp every 30 s.
   `/etc/lsb-release`, `/etc/thadd-release`, MOTD and custom artwork
   (neofetch, `thadd` CLI, portal).
 - Credentials are injected at boot: `THADD_USER` / `THADD_PASSWORD` /
-  `THADD_ROOT_PASSWORD`. The VNC password file for the browser desktop is
-  regenerated from `THADD_PASSWORD` on every boot, so both access paths
-  always agree.
+  `THADD_ROOT_PASSWORD`. `chpasswd` writes a real shadow hash, `passwd -u`
+  unlocks the account, and `harden-rdp.sh` proves (via `pamtester`) that
+  the *xrdp-sesman* PAM service accepts that password before any client
+  connects. The VNC password file for the browser desktop is regenerated
+  from `THADD_PASSWORD` on every boot, written to the user's real home
+  (never `/root` via a leaked `su` `$HOME`), so both access paths agree.
 - `/home/thadd` is volume-backed. The `skel/` tree (desktop theme, dock,
   conky, shell) lives in the image at `/etc/skel`; the entrypoint seeds it
   into any fresh volume and never overwrites an existing home.
@@ -78,10 +81,12 @@ renderer + xrdp every 30 s.
 
 | Layer | Control |
 |---|---|
-| RDP | xrdp TLS, `crypt_level=high`, NLA negotiation (`security_layer=negotiate`), system-account auth |
-| Browser path | HTTPS at Railway's edge → nginx → websockify; VNC socket is localhost-only; RFB session is password-authenticated |
+| RDP | xrdp TLS (`security_layer=tls`, `crypt_level=high`) + system-account PAM. TLS is intentional: Debian's xrdp does not implement Windows NLA/CredSSP, and `security_layer=negotiate` would advertise HYBRID and then fail the login. |
+| PAM | Container-safe `/etc/pam.d/xrdp-sesman`: `pam_loginuid` is **optional**. Debian's packaged file marks it `required`, which rejects every correct password inside Docker/Railway (`/proc/self/loginuid` is immutable). |
+| Session type | `autorun=Xvnc` only. Xorg/`xorgxrdp` is not installed; leaving Xorg as the default session is the other classic "password ok, desktop never appears" bug. |
+| Browser path | HTTPS at Railway's edge → nginx → `/desktop.html` auto-submits the VNC password → websockify; VNC socket is localhost-only; RFB session is password-authenticated |
 | Surface | The only internet-facing listeners are nginx and xrdp; everything else binds 127.0.0.1 |
-| Secrets | No credentials baked into the image; all set via Railway variables at boot |
+| Secrets | No credentials baked into the image; all set via Railway variables at boot. `/api/creds` is JSON-escaped. |
 | Password policy | Defaults exist for instant demo; README directs changing them (the portal shows the live values) |
 
 Recommendations: use a strong `THADD_PASSWORD`, consider Railway's private

@@ -22,10 +22,19 @@
     .then(function (r) { return r.json(); })
     .then(function (c) {
       document.getElementById("rdpUser").textContent = c.username || "thadd";
-      document.getElementById("rdpPass").textContent = c.password || "";
+      document.getElementById("rdpPass").textContent = c.password || "thadd";
       document.getElementById("rdpPort").textContent = c.rdp_port || 3389;
     })
     .catch(function () { /* portal may run standalone; keep defaults */ });
+
+  fetch("/api/login-status", { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (s) {
+      if (s && s.ready === false) {
+        setStatus("bad", "Login path not ready — check thadd doctor");
+      }
+    })
+    .catch(function () { /* endpoint is optional on the local preview server */ });
 
   document.getElementById("copyBtn").addEventListener("click", function () {
     var user = document.getElementById("rdpUser").textContent;

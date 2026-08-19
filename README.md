@@ -35,7 +35,7 @@ Every push to this repo triggers a full end-to-end test that **logs into the run
 
 <p align="center"><img src="ci/thadd-os-screenshot.jpg" alt="THADD OS desktop, captured over RDP during CI" width="640"></p>
 
-> The screenshot above is machine-captured by the CI workflow (`thadd-os-ci.yml`) — it is not a mock-up.
+> The screenshot is machine-captured by the CI workflow. A previous 2 KB black frame was a false green (FreeRDP stayed alive without logging in); CI now requires a sesman `login successful` line and rejects near-empty JPEGs.
 
 ---
 
@@ -83,7 +83,7 @@ Your entire desktop profile, files and settings now survive redeploys and restar
 
 | Path | How |
 |---|---|
-| **Browser** | Open the service's public domain (e.g. `https://thadd-os-production-xxxx.up.railway.app`) → **Open Desktop in Browser** → enter username/password. |
+| **Browser** | Open the service's public domain (e.g. `https://thadd-os-production-xxxx.up.railway.app`) → **Open Desktop in Browser**. You are signed in automatically. |
 | **Windows Remote Desktop** | Service → **Settings → Networking → TCP Proxy** → add a proxy for application port **3389**. Railway gives you a public `host:port` (e.g. `roundhouse.proxy.rlwy.net:11105`). Open **mstsc**, type the host, port, username and password. |
 | **Any RDP client** | Remmina / FreeRDP / Jump Desktop / Parallels Client — same host, port `3389`, username + password. |
 | **CLI (TCP proxy)** | `railway tcp-proxy create --port 3389` |
@@ -123,9 +123,9 @@ Inside the OS, `RAILWAY_TCP_PROXY_DOMAIN` / `RAILWAY_TCP_PROXY_PORT` are exposed
 
 - **Base:** Debian 12 (bookworm-slim)
 - **Desktop:** XFCE 4.18 + whisker menu + Arc-Dark + Papirus-Dark + Inter + JetBrains Mono
-- **RDP:** xrdp (Microsoft Remote Desktop compatible, TLS/NLA negotiation)
-- **Browser desktop:** TigerVNC (Xvnc) + websockify + noVNC, persistent always-on session
-- **Edge:** nginx portal with `/healthz`, `/api/creds`, WebSocket bridge
+- **RDP:** xrdp (Microsoft Remote Desktop compatible, TLS — not NLA; Debian xrdp cannot finish CredSSP)
+- **Browser desktop:** TigerVNC (Xvnc) + websockify + noVNC, persistent always-on session, one-click auto-login
+- **Edge:** nginx portal with `/healthz`, `/api/creds`, `/api/login-status`, WebSocket bridge
 - **Orchestration:** supervisord — every service auto-restarts forever
 - **Apps:** Firefox ESR, Thunar, Mousepad, Ristretto, btop, neofetch, htop, git, sudo, bat, duf…
 - **Extras:** custom `thadd` CLI, `thadd doctor` diagnostics, first-boot welcome terminal, custom MOTD, THADD-branded `os-release` (so `neofetch` says **THADD OS**)
@@ -147,9 +147,10 @@ flowchart LR
     P[git push] --> B[Docker build<br/>identical to Railway]
     B --> R[docker run<br/>full OS boot]
     R --> H[HTTP portal + healthz]
-    H --> W[WebSocket → live Xvnc desktop]
+    H --> L[PAM login-path proof]
+    L --> W[WebSocket → live Xvnc desktop]
     W --> N[Raw RDP protocol negotiation]
-    N --> F[FreeRDP full login]
+    N --> F[FreeRDP login + sesman success]
     F --> S[Desktop session audit<br/>XFCE · Plank · xrdp]
     S --> C[Screenshot committed<br/>as proof]
 ```
@@ -167,8 +168,10 @@ docker run -d --name thadd -p 8080:8080 -p 3389:3389 \
 
 - [`docs/BEST_OF_LINUX.md`](docs/BEST_OF_LINUX.md) — the design manifesto: which distro contributed what
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — ports, services, sessions, security and performance tuning
+- [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md) — why RDP credentials failed, and every fix
 - [`FORENSIC_SCAN.md`](FORENSIC_SCAN.md) — the forensic audit of the legacy repository
-- [`scripts/forensic-scan.sh`](scripts/forensic-scan.sh) — the reusable forensic scanner
+- [`docs/FORENSIC_SCAN_CURRENT.md`](docs/FORENSIC_SCAN_CURRENT.md) — the latest full-tree rescan
+- [`scripts/forensic-scan.sh`](scripts/forensic-scan.sh) — the reusable forensic scanner (includes the RDP login-path audit)
 
 ## ❓ FAQ
 
@@ -176,9 +179,11 @@ docker run -d --name thadd -p 8080:8080 -p 3389:3389 \
 
 **How heavy is it?** Idle ≈ 300 MB RAM. Firefox browsing ≈ 600–800 MB. A Railway 1 GB plan is plenty; 512 MB works for light use. Tuning knobs in `docs/ARCHITECTURE.md`.
 
-**Can I really use Windows' own Remote Desktop app?** Yes — mstsc connects to the TCP-proxy host:port with the username/password. The CI pipeline proves this exact path with FreeRDP on every push.
+**Can I really use Windows' own Remote Desktop app?** Yes — mstsc connects to the TCP-proxy host:port with the username/password. Accept the self-signed certificate warning (the cert is generated at boot). The CI pipeline proves this exact path with FreeRDP **and** a PAM `pamtester` check against `xrdp-sesman` on every push.
 
-**Is the connection secure?** RDP runs xrdp with TLS (`crypt_level=high`, NLA negotiation); the browser path is HTTPS on Railway's edge and the VNC socket is localhost-only inside the container, bridged through a password-authenticated RFB session. The password is yours to strengthen via variables.
+**I type the username and password and login fails. Why?** Three things used to cause this even with the correct password; all three are now fixed. (1) Debian's `xrdp-sesman` PAM stack marks `pam_loginuid` as `required`, which always fails inside Docker/Railway. (2) The default xrdp session was Xorg, but `xorgxrdp` is not installed. (3) The browser desktop is VNC — it never asks for a username; the portal now auto-signs you in. Run `thadd doctor` inside the OS if anything still looks off. See [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md).
+
+**Is the connection secure?** RDP runs xrdp with TLS (`security_layer=tls`, `crypt_level=high`). We deliberately do **not** advertise NLA/CredSSP — Debian's xrdp cannot complete a HYBRID handshake, so `negotiate` made Windows clients fail after the password was accepted. The browser path is HTTPS on Railway's edge and the VNC socket is localhost-only inside the container, bridged through a password-authenticated RFB session. The password is yours to strengthen via variables.
 
 ---
 

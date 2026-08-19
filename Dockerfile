@@ -59,11 +59,15 @@ RUN apt-get update && apt-get install -y \
 # to provision the browser-desktop password. On Debian 12 the package is only
 # a Recommends of tigervnc-standalone-server, so --no-install-recommends drops
 # it — without it the entrypoint crashed with "vncpasswd: command not found".
+# pamtester lets the entrypoint / CI prove that xrdp-sesman will accept the
+# username+password *before* a client ever connects (catches the classic
+# container pam_loginuid "login failed for display 0" bug).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xrdp tigervnc-standalone-server tigervnc-common tigervnc-tools \
       novnc websockify \
       nginx supervisor \
       firefox-esr \
+      pamtester \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Starship shell prompt (best-effort; .bashrc falls back to a branded PS1)
@@ -100,15 +104,24 @@ COPY config/supervisord.conf        /etc/supervisor/supervisord.conf
 COPY config/thadd.conf               /etc/supervisor/conf.d/thadd.conf
 COPY config/nginx.conf.template      /etc/nginx/sites-available/thadd.conf.template
 COPY config/startwm.sh               /etc/xrdp/startwm.sh
+COPY config/startwm.sh               /opt/thadd/startwm.sh
 COPY config/session.sh               /opt/thadd/session.sh
 COPY config/welcome.sh               /opt/thadd/welcome.sh
 COPY config/run-vnc.sh               /opt/thadd/run-vnc.sh
 COPY config/healthcheck.sh           /opt/thadd/healthcheck.sh
+COPY config/harden-rdp.sh            /opt/thadd/harden-rdp.sh
+COPY config/xrdp.ini                 /opt/thadd/xrdp.ini
+COPY config/sesman.ini               /opt/thadd/sesman.ini
+COPY config/pam-xrdp-sesman          /opt/thadd/pam-xrdp-sesman
+COPY config/xrdp.ini                 /etc/xrdp/xrdp.ini
+COPY config/sesman.ini               /etc/xrdp/sesman.ini
+COPY config/pam-xrdp-sesman          /etc/pam.d/xrdp-sesman
 COPY config/thadd                    /usr/local/bin/thadd
 COPY config/thadd-apps/              /usr/share/applications/
 
 RUN chmod +x /etc/xrdp/startwm.sh /opt/thadd/session.sh /opt/thadd/welcome.sh \
-             /opt/thadd/run-vnc.sh /opt/thadd/healthcheck.sh /usr/local/bin/thadd
+             /opt/thadd/run-vnc.sh /opt/thadd/healthcheck.sh \
+             /opt/thadd/harden-rdp.sh /opt/thadd/startwm.sh /usr/local/bin/thadd
 
 COPY web/                  /opt/thadd/web/
 COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/

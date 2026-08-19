@@ -155,6 +155,54 @@ for entry in "${CAPS[@]}"; do
   [ "$n" -gt 0 ] && printf '| %s | %s file(s) matched |\n' "$desc" "$n" >> "$LOG" || printf '| %s | none |\n' "$desc" >> "$LOG"
 done
 
+# --- 8b. RDP / credential login-path audit --------------------------------
+h3 "8b. RDP Login-Path Audit (why credentials succeed or fail)" >> "$LOG"
+printf '\nThese checks are the difference between "port 3389 is open" and "the username+password actually log you in".\n\n' >> "$LOG"
+printf '| Check | Result |\n|---|---|\n' >> "$LOG"
+rdp_audit() {
+  local name="$1" cond="$2"
+  if eval "$cond" >/dev/null 2>&1; then
+    printf '| %s | PASS |\n' "$name" >> "$LOG"
+  else
+    printf '| %s | **FAIL** |\n' "$name" >> "$LOG"
+  fi
+}
+rdp_audit "container-safe PAM file shipped (config/pam-xrdp-sesman)" \
+  "test -f \"$TARGET/config/pam-xrdp-sesman\""
+rdp_audit "PAM does not require pam_loginuid" \
+  "! grep -E '^[[:space:]]*session[[:space:]]+required[[:space:]]+pam_loginuid' \"$TARGET/config/pam-xrdp-sesman\""
+rdp_audit "xrdp.ini shipped with autorun=Xvnc" \
+  "grep -E '^[[:space:]]*autorun=Xvnc' \"$TARGET/config/xrdp.ini\""
+rdp_audit "xrdp.ini security_layer=tls (no NLA/HYBRID trap)" \
+  "grep -E '^[[:space:]]*security_layer=tls' \"$TARGET/config/xrdp.ini\""
+rdp_audit "xrdp.ini has no live [Xorg] session (xorgxrdp is not installed)" \
+  "! grep -E '^\\[Xorg\\]' \"$TARGET/config/xrdp.ini\""
+rdp_audit "sesman AlwaysGroupCheck=false" \
+  "grep -E '^[[:space:]]*AlwaysGroupCheck=false' \"$TARGET/config/sesman.ini\""
+rdp_audit "entrypoint sets the password via chpasswd" \
+  "grep -q chpasswd \"$TARGET/entrypoint.sh\""
+rdp_audit "entrypoint JSON-escapes /api/creds" \
+  "grep -q json_escape \"$TARGET/entrypoint.sh\""
+rdp_audit "harden-rdp.sh runs on every boot" \
+  "grep -q harden-rdp.sh \"$TARGET/entrypoint.sh\""
+rdp_audit "VNC password is written to the user's real home (no su HOME leak)" \
+  "grep -q 'HOME_DIR/.vnc/passwd' \"$TARGET/entrypoint.sh\""
+rdp_audit "Dockerfile installs pamtester" \
+  "grep -q pamtester \"$TARGET/Dockerfile\""
+rdp_audit "Dockerfile installs tigervnc-tools (vncpasswd)" \
+  "grep -q tigervnc-tools \"$TARGET/Dockerfile\""
+rdp_audit "CI proves PAM accepts the password (test_login.py)" \
+  "test -f \"$TARGET/scripts/ci/test_login.py\""
+rdp_audit "CI FreeRDP step requires sesman 'login successful'" \
+  "grep -q 'login successful' \"$TARGET/scripts/ci/rdp-login.sh\""
+rdp_audit "CI rejects a near-empty (black) screenshot" \
+  "grep -q '8000' \"$TARGET/scripts/ci/rdp-login.sh\""
+rdp_audit "browser desktop auto-login page exists" \
+  "test -f \"$TARGET/web/desktop.html\""
+rdp_audit "portal does not tell users to type a username into noVNC" \
+  "! grep -q 'Enter the username' \"$TARGET/web/index.html\""
+printf '\n' >> "$LOG"
+
 # --- 9. risk score --------------------------------------------------------
 h3 "9. Risk Assessment" >> "$LOG"
 RISK=0

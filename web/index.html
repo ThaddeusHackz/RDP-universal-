@@ -45,10 +45,10 @@
       <div class="card-icon">🌐</div>
       <h2>Browser Desktop</h2>
       <p>Open the full desktop instantly — no installs, no plugins. Works on any device with a browser.</p>
-      <a class="btn btn-primary" href="/vnc/vnc.html?autoconnect=1&resize=scale&reconnect=1&reconnect_delay=2000&path=websockify&show_dot=true">
+      <a class="btn btn-primary" href="/desktop.html">
         Open Desktop in Browser →
       </a>
-      <p class="hint">Enter the username &amp; password shown below when prompted.</p>
+      <p class="hint">One click — you are signed in automatically. noVNC never asks for a username.</p>
     </div>
 
     <div class="card">
@@ -59,10 +59,10 @@
         <tr><td>Host</td><td><code id="rdpHost">your TCP-proxy domain (Railway)</code></td></tr>
         <tr><td>Port</td><td><code id="rdpPort">3389</code></td></tr>
         <tr><td>Username</td><td><code id="rdpUser">thadd</code></td></tr>
-        <tr><td>Password</td><td><code id="rdpPass">••••••</code></td></tr>
+        <tr><td>Password</td><td><code id="rdpPass">thadd</code></td></tr>
       </table>
       <button class="btn btn-ghost" id="copyBtn" type="button">Copy credentials</button>
-      <p class="hint">On Railway: Settings → Networking → TCP Proxy → port 3389.</p>
+      <p class="hint">Native RDP clients use <strong>both</strong> username and password. On Railway: Settings → Networking → TCP Proxy → port 3389. Accept the self-signed certificate warning.</p>
     </div>
   </section>
 

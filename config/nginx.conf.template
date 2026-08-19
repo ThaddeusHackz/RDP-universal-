@@ -27,6 +27,13 @@ server {
         add_header Cache-Control "no-store";
     }
 
+    # Login-path readiness (password hash, PAM, xrdp.ini, VNC passwd)
+    location = /api/login-status {
+        alias /opt/thadd/login-status.json;
+        default_type application/json;
+        add_header Cache-Control "no-store";
+    }
+
     # noVNC web client
     location /vnc/ {
         alias /usr/share/novnc/;

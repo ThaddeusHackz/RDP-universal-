@@ -4,6 +4,12 @@
 **Target:** `ThaddeusHackz/RDP-universal-` — the legacy repository contents
 **Disposition:** target purged per repository-owner directive; THADD OS built in its place.
 
+> **Follow-up (2026-08-19):** a second, RDP-login-specific forensic pass found why
+> the published credentials still failed to log anyone in. See
+> [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md) (findings + fixes)
+> and [`docs/FORENSIC_SCAN_CURRENT.md`](docs/FORENSIC_SCAN_CURRENT.md) (raw rescan,
+> including the RDP login-path audit — every check PASS).
+
 ---
 
 ## 0. Executive Summary
