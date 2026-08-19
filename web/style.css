@@ -144,3 +144,17 @@ main { max-width: 1100px; margin: 0 auto; padding: 40px 28px 30px; }
   .nav { flex-direction: column; gap: 14px; }
   .hero h1 { font-size: 2rem; }
 }
+
+/* login-path banner (shown when /api/login-probe reports not-ready) */
+.login-banner {
+  margin: 18px auto 0;
+  max-width: 760px;
+  padding: 14px 18px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.login-banner-hint { display: block; margin-top: 6px; color: #fca5a5; opacity: 0.85; }

@@ -44,6 +44,16 @@ chk "portal does not ask noVNC for a username" \
 chk "healthcheck verifies shadow hash" grep -q 'getent shadow' "$ROOT/config/healthcheck.sh"
 chk "wait-health waits for Xvnc + password" grep -q 'xrdp-sesman' "$ROOT/scripts/ci/wait-health.sh"
 chk "nginx serves /api/login-status" grep -q login-status "$ROOT/config/nginx.conf.template"
+chk "login-probe shipped" test -f "$ROOT/config/login-probe.sh"
+chk "supervisor runs login-probe" grep -q login-probe "$ROOT/config/thadd.conf"
+chk "nginx serves /api/login-probe" grep -q login-probe "$ROOT/config/nginx.conf.template"
+chk "Dockerfile stamps image build" grep -q thadd-build "$ROOT/Dockerfile"
+chk "entrypoint self-heals stale xstartup" grep -q 'etc/skel/.vnc/xstartup' "$ROOT/entrypoint.sh"
+chk "portal surfaces login-probe banner" grep -q loginBanner "$ROOT/web/index.html"
+# the live workflow ships as ci/thadd-os-ci.yml.example (enabling it needs the
+# workflows permission — see ci/ENABLE-CI.md); the gate must live in it
+chk "CI suite runs the login-path gate" grep -q test_login.py "$ROOT/ci/thadd-os-ci.yml.example"
+chk "CI suite runs stale-volume self-heal test" grep -q test_stale_volume.sh "$ROOT/ci/thadd-os-ci.yml.example"
 
 # syntax of every shell script we ship
 while IFS= read -r -d '' f; do

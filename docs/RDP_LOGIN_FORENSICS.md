@@ -4,6 +4,12 @@
 **Question:** *Why can't I log into the OS with the RDP credentials?*
 **Disposition:** every failure mode below is now fixed in this tree.
 
+> **Follow-up (2026-08-19, same day):** a final, deeper pass — upstream
+> xrdp 0.9.19 source verification, CI archaeology, and a live-deployment
+> gap analysis — found four more defects *around* the login chain (dead CI
+> gate, unhealed stale volumes, invisible stale builds, silent failures).
+> See [`FORENSIC_SCAN_FINAL.md`](FORENSIC_SCAN_FINAL.md).
+
 ---
 
 ## 0. Executive summary

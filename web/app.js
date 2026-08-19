@@ -24,6 +24,8 @@
       document.getElementById("rdpUser").textContent = c.username || "thadd";
       document.getElementById("rdpPass").textContent = c.password || "thadd";
       document.getElementById("rdpPort").textContent = c.rdp_port || 3389;
+      var tag = document.getElementById("buildTag");
+      if (tag && c.build) { tag.textContent = c.build; }
     })
     .catch(function () { /* portal may run standalone; keep defaults */ });
 
@@ -35,6 +37,27 @@
       }
     })
     .catch(function () { /* endpoint is optional on the local preview server */ });
+
+  /* live self-test: does THIS instance accept the credentials right now? */
+  function refreshProbe() {
+    fetch("/api/login-probe", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (p) {
+        var banner = document.getElementById("loginBanner");
+        var msg = document.getElementById("loginBannerMsg");
+        if (!banner) { return; }
+        if (p && p.ready === false) {
+          if (msg) { msg.textContent = (p.reasons || []).join(" "); }
+          banner.hidden = false;
+          setStatus("bad", "Login probe failing — see banner");
+        } else if (p && p.ready === true) {
+          banner.hidden = true;
+        }
+      })
+      .catch(function () { /* older builds lack the probe; login-status covers them */ });
+  }
+  refreshProbe();
+  setInterval(refreshProbe, 30000);
 
   document.getElementById("copyBtn").addEventListener("click", function () {
     var user = document.getElementById("rdpUser").textContent;

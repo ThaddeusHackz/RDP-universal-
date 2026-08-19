@@ -31,6 +31,11 @@
 </nav>
 
 <main>
+  <div id="loginBanner" class="login-banner" hidden>
+    <strong>⚠ Login path not ready on this deployment.</strong>
+    <span id="loginBannerMsg"></span>
+    <span class="login-banner-hint">If this persists, redeploy from the latest commit of the repo — this instance may be running an older build.</span>
+  </div>
   <section class="hero">
     <h1>Your Linux desktop,<br><span class="grad">always on. Anywhere.</span></h1>
     <p class="lede">
@@ -77,7 +82,7 @@
 </main>
 
 <footer class="footer">
-  <span>THADD OS 1.0 (Nebula) · built on Debian 12 · XFCE 4.18 · xrdp · noVNC</span>
+  <span>THADD OS 1.0 (Nebula) · built on Debian 12 · XFCE 4.18 · xrdp · noVNC · build <code id="buildTag">…</code></span>
   <a href="https://github.com/ThaddeusHackz/RDP-universal-" target="_blank" rel="noopener">GitHub →</a>
 </footer>
 

@@ -25,6 +25,7 @@ const MIME = {
 const creds = {
   os: "THADD OS",
   version: "1.0.0 (Nebula) — local preview",
+  build: "local-preview",
   username: "thadd",
   password: "thadd",
   rdp_port: 3389,
@@ -42,6 +43,17 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/api/creds") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify(creds, null, 2));
+  }
+  if (url.pathname === "/api/login-probe") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify({
+      ready: true,
+      user: creds.username,
+      build: "local-preview",
+      checked_at: new Date().toISOString(),
+      reasons: [],
+      mode: "preview",
+    }, null, 2));
   }
   if (url.pathname === "/api/login-status") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });

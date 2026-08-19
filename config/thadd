@@ -61,6 +61,7 @@ doctor() {
         "! grep -E '^[[:space:]]*session[[:space:]]+required[[:space:]]+pam_loginuid' /etc/pam.d/xrdp-sesman"
     chk "xrdp autorun=Xvnc       " "grep -E '^[[:space:]]*autorun=Xvnc' /etc/xrdp/xrdp.ini"
     chk "xrdp security_layer=tls " "grep -E '^[[:space:]]*security_layer=tls' /etc/xrdp/xrdp.ini"
+    chk "login probe (live self-test)" "grep -q '\"ready\": true' /opt/thadd/login-probe.json"
     chk "user in tsusers         " "id -nG \"$user\" | grep -qw tsusers"
     if command -v pamtester >/dev/null 2>&1 && [ -n "${THADD_PASSWORD:-}" ]; then
         chk "PAM accepts credentials " \
@@ -71,6 +72,7 @@ doctor() {
     printf '%b\n' "  ${CD}available memory: ${C0}${memfree} MB"
     printf '%b\n' "  ${CD}ip addresses:     ${C0}$(hostname -I 2>/dev/null | tr -s ' ')"
     printf '%b\n' "  ${CD}login user:       ${C0}${user}"
+    printf '%b\n' "  ${CD}image build:      ${C0}$(cat /etc/thadd-build 2>/dev/null || echo unknown)"
     printf '%b\n' "\n${CY}All systems are supervised and auto-restart forever.${C0}"
 }
 

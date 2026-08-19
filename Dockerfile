@@ -76,6 +76,10 @@ RUN curl -fsSL https://starship.rs/install.sh | sh -s -- -y || true
 # ---------------------------------------------------------------------------
 # THADD OS identity — the system reports itself as THADD OS everywhere
 # ---------------------------------------------------------------------------
+# Build fingerprint: lets the portal / API / `thadd doctor` prove which image
+# a running deployment is on, so a stale (pre-fix) build can never masquerade
+# as the fixed one ("credentials fail" while the fix never actually shipped).
+RUN date -u +%Y-%m-%dT%H:%M:%SZ > /etc/thadd-build
 COPY config/os-release /etc/os-release
 COPY config/lsb-release /etc/lsb-release
 COPY config/thadd-release /etc/thadd-release
@@ -110,6 +114,7 @@ COPY config/welcome.sh               /opt/thadd/welcome.sh
 COPY config/run-vnc.sh               /opt/thadd/run-vnc.sh
 COPY config/healthcheck.sh           /opt/thadd/healthcheck.sh
 COPY config/harden-rdp.sh            /opt/thadd/harden-rdp.sh
+COPY config/login-probe.sh           /opt/thadd/login-probe.sh
 COPY config/xrdp.ini                 /opt/thadd/xrdp.ini
 COPY config/sesman.ini               /opt/thadd/sesman.ini
 COPY config/pam-xrdp-sesman          /opt/thadd/pam-xrdp-sesman
@@ -121,7 +126,8 @@ COPY config/thadd-apps/              /usr/share/applications/
 
 RUN chmod +x /etc/xrdp/startwm.sh /opt/thadd/session.sh /opt/thadd/welcome.sh \
              /opt/thadd/run-vnc.sh /opt/thadd/healthcheck.sh \
-             /opt/thadd/harden-rdp.sh /opt/thadd/startwm.sh /usr/local/bin/thadd
+             /opt/thadd/harden-rdp.sh /opt/thadd/login-probe.sh \
+             /opt/thadd/startwm.sh /usr/local/bin/thadd
 
 COPY web/                  /opt/thadd/web/
 COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/

@@ -131,6 +131,20 @@ check(
     status == 200 and info.get("ready") is True,
     f"[{status}] {info!r}"[:300],
 )
+
+# The deployed instance's own live self-test (pamtester accept/reject +
+# listeners + PAM/xrdp.ini audit), refreshed every minute by login-probe.
+status, probe = http_json("/api/login-probe")
+check(
+    "/api/login-probe reports ready on this instance",
+    status == 200 and probe.get("ready") is True,
+    f"[{status}] {probe!r}"[:300],
+)
+check(
+    "/api/login-probe carries the build stamp",
+    status == 200 and bool(probe.get("build")),
+    f"[{status}]",
+)
 check(
     "/api/login-status pam_loginuid_required is false",
     status == 200 and info.get("pam_loginuid_required") is False,

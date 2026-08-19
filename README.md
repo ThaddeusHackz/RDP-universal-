@@ -106,6 +106,34 @@ Inside the OS, `RAILWAY_TCP_PROXY_DOMAIN` / `RAILWAY_TCP_PROXY_PORT` are exposed
 
 ---
 
+## 🩺 If login ever fails
+
+THADD OS now proves its own login path from *inside the running instance*,
+every minute. Before concluding anything is broken — or after a redeploy —
+check the three live endpoints:
+
+```bash
+B=https://<your-public-domain>
+curl -fsS $B/api/login-probe    # ready:true ⇒ this instance accepts the creds right now
+curl -fsS $B/api/login-status   # boot-time audit of PAM / xrdp.ini / shadow / VNC
+curl -fsS $B/api/creds          # live credentials + the image BUILD timestamp
+```
+
+- `login-probe.ready` **false** → the `reasons` array says *exactly* why
+  (locked account, broken PAM, missing TLS cert, …). Inside the OS:
+  `thadd doctor`.
+- Credentials still refused but the probe says ready → compare the `build`
+  stamp with the repo's latest commit date. An **older build** means Railway
+  never redeployed the fix: redeploy/restart the service.
+- Native RDP on Railway **requires a TCP proxy for port 3389** (Settings →
+  Networking → TCP Proxy). Connecting mstsc at the *web* domain cannot work.
+- Expect one **self-signed certificate warning** (TLS, generated at boot) —
+  accept it. And note xrdp's login screen uses a US keyboard layout: if your
+  password contains symbols and your client uses another layout, prefer the
+  browser desktop or a letters+digits password.
+
+---
+
 ## ✨ What's inside
 
 **The "best of all Linux" lineup** — see [`docs/BEST_OF_LINUX.md`](docs/BEST_OF_LINUX.md) for the full lineage:
