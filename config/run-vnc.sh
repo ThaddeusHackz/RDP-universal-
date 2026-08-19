@@ -20,7 +20,35 @@ cleanup() {
 }
 trap cleanup EXIT TERM INT
 
-Xvnc :1 \
+# Locate the server binary: Debian exposes Xvnc via update-alternatives, but
+# fail over to Xtigervnc so a missing alternative can never kill the desktop.
+VNCBIN="$(command -v Xvnc || command -v Xtigervnc || true)"
+if [ -z "$VNCBIN" ]; then
+    echo "[thadd-desktop] FATAL: no VNC server binary found (Xvnc / Xtigervnc)."
+    echo "[thadd-desktop]        install tigervnc-standalone-server."
+    exit 1
+fi
+
+# Never start without a password file: Xvnc -rfbauth with a missing file exits
+# instantly and supervisord would hot-loop the desktop forever. Wait politely
+# for the entrypoint/provisioning, then fail loudly (supervisord retries).
+PASSWD_FILE="$HOME/.vnc/passwd"
+for i in $(seq 1 60); do
+    [ -s "$PASSWD_FILE" ] && break
+    [ "$i" -eq 1 ] && echo "[thadd-desktop] waiting for $PASSWD_FILE to be provisioned…"
+    sleep 1
+done
+if [ ! -s "$PASSWD_FILE" ]; then
+    echo "[thadd-desktop] FATAL: $PASSWD_FILE missing after 60s — refusing to start"
+    echo "[thadd-desktop]        an unauthenticated desktop. Entrypoint must run"
+    echo "[thadd-desktop]        vncpasswd/tigervncpasswd for user $USER."
+    exit 1
+fi
+
+echo "[thadd-desktop] starting $VNCBIN on :1 (${RESOLUTION:-1600x900})"
+# NOTE: -rfbwait was removed in TigerVNC 1.12 (Debian 12) — passing it makes
+# Xvnc abort with "Unrecognized option". Do not re-add it.
+"$VNCBIN" :1 \
     -geometry "${RESOLUTION:-1600x900}" \
     -depth 24 \
     -rfbauth "$HOME/.vnc/passwd" \
@@ -28,7 +56,6 @@ Xvnc :1 \
     -localhost \
     -AlwaysShared \
     -desktop "THADD OS" \
-    -rfbwait 30000 \
     >/tmp/xvnc.log 2>&1 &
 XVNC_PID=$!
 

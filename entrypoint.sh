@@ -5,7 +5,7 @@
 #  Handles users, credentials, volume seeding, keys, config rendering and
 #  optional swap, then hands control to supervisord.
 # =============================================================================
-set -e
+set -euo pipefail
 
 export THADD_USER="${THADD_USER:-thadd}"
 export THADD_PASSWORD="${THADD_PASSWORD:-thadd}"
@@ -44,20 +44,59 @@ if [ ! -f "$HOME_DIR/.thadd-seeded" ]; then
   touch "$HOME_DIR/.thadd-seeded"
 fi
 
+# -------------------------------------------------------- profile safeguards
+# Runs on EVERY boot (not only fresh seeds) so a stale or hand-populated
+# volume can't break the persistent browser desktop.
+[ -f "$HOME_DIR/.vnc/xstartup" ] && chmod +x "$HOME_DIR/.vnc/xstartup" || true
+
 # -------------------- VNC password (browser desktop) syncs with THADD_PASSWORD
-su -s /bin/bash "$THADD_USER" -c 'mkdir -p "$HOME/.vnc"'
-printf '%s\n%s\n' "$THADD_PASSWORD" "$THADD_PASSWORD" | \
-  su -s /bin/bash "$THADD_USER" -c 'vncpasswd -f > "$HOME/.vnc/passwd"'
-su -s /bin/bash "$THADD_USER" -c 'chmod 600 "$HOME/.vnc/passwd"'
+# `vncpasswd` lives in the tigervnc-tools package on Debian 12 (a mere
+# Recommends of tigervnc-standalone-server). A missing binary must NEVER kill
+# the boot again: try both tool names, warn loudly on failure, keep going —
+# supervisord + nginx must always come up so the portal and healthchecks work.
+write_vnc_passwd() {
+  local tool=""
+  if command -v vncpasswd >/dev/null 2>&1; then
+    tool="vncpasswd"
+  elif command -v tigervncpasswd >/dev/null 2>&1; then
+    tool="tigervncpasswd"
+  else
+    warn "no VNC password tool found (install tigervnc-tools) — VNC credential sync skipped"
+    return 0
+  fi
+  su -s /bin/bash "$THADD_USER" -c 'mkdir -p "$HOME/.vnc"' || return 1
+  # single input line: a second line would be stored as a duplicate
+  # *view-only* password in the obfuscated passwd file.
+  printf '%s\n' "$THADD_PASSWORD" | \
+    su -s /bin/bash "$THADD_USER" -c "$tool -f > \"\$HOME/.vnc/passwd\"" || return 1
+  su -s /bin/bash "$THADD_USER" -c 'chmod 600 "$HOME/.vnc/passwd"' || return 1
+  log "VNC credential synced (${tool}) — browser desktop login ready"
+}
+write_vnc_passwd || \
+  warn "VNC password provisioning failed — the browser desktop may reject logins until fixed"
 
 # -------------------------------------------------------- runtime plumbing
 install -d -o root -g root -m 755 /run/dbus /run/xrdp
 ln -sfn /run/dbus /var/run/dbus 2>/dev/null || true
 
 [ -f /etc/xrdp/rsakeys.ini ] || xrdp-keygen xrdp /etc/xrdp/rsakeys.ini >/dev/null 2>&1 || true
-if [ ! -f /etc/xrdp/cert.pem ]; then
+
+# Deterministic TLS for xrdp (security_layer=negotiate): regenerate the pair
+# if EITHER half is missing (never a mismatched cert/key), then pin xrdp.ini
+# to these exact paths instead of relying on distro defaults, and let the
+# `xrdp` group read the private key.
+if [ ! -s /etc/xrdp/cert.pem ] || [ ! -s /etc/xrdp/key.pem ]; then
   openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/xrdp/key.pem \
     -out /etc/xrdp/cert.pem -days 3650 -subj "/CN=THADD-OS" >/dev/null 2>&1 || true
+fi
+if [ -s /etc/xrdp/cert.pem ] && [ -s /etc/xrdp/key.pem ]; then
+  sed -i \
+    -e 's|^certificate=.*|certificate=/etc/xrdp/cert.pem|' \
+    -e 's|^key_file=.*|key_file=/etc/xrdp/key.pem|' \
+    /etc/xrdp/xrdp.ini || true
+  ( chgrp xrdp /etc/xrdp/key.pem 2>/dev/null \
+    || chgrp ssl-cert /etc/xrdp/key.pem 2>/dev/null \
+    || true ) && chmod 640 /etc/xrdp/key.pem || true
 fi
 
 envsubst '${PORT}' \

@@ -41,7 +41,7 @@ kv "Symlinks" "$SYML" >> "$LOG"
 kv "Git repository" "$(git -C "$TARGET" rev-parse --is-inside-work-tree 2>/dev/null || echo 'no')" >> "$LOG"
 
 # --- 2. full inventory with hashes ----------------------------------------
-h2 "2. File Inventory (SHA-256)" > /dev/null
+h2 "2. File Inventory (SHA-256)" >> "$LOG"
 printf '"path","size_bytes","sha256","mime","entropy_bits","mtime"\n' > "$CSV"
 echo '' >> "$LOG"
 find "$TARGET" -type f ! -path '*/.git/*' -print0 2>/dev/null |
@@ -171,8 +171,9 @@ printf '* Scoring: embedded secrets +30, >5 external URLs +15, high-entropy blob
 
 # --- 10. verdict ----------------------------------------------------------
 h3 "10. Investigator Verdict" >> "$LOG"
-printf 'Target purged and replaced under authority of the repository owner.\n' >> "$LOG"
-printf 'The artifact found was a Windows GitHub-Actions RDP/Tailscale runner workflow.\n' >> "$LOG"
+printf 'Static forensic analysis completed at %s.\n' "$TS" >> "$LOG"
+printf 'Review sections 4 (secrets) and 6 (high-entropy blobs) for flagged material.\n' >> "$LOG"
+printf 'Confirm no credentials are committed before extending or redeploying the target.\n' >> "$LOG"
 
 say "[+] Forensic scan complete"
 say "[+] Report:  $LOG"
