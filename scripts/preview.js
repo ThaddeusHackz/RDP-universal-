@@ -43,6 +43,21 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify(creds, null, 2));
   }
+  if (url.pathname === "/api/login-status") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify({
+      user: creds.username,
+      password_set: true,
+      vnc_passwd: true,
+      pam_hardened: true,
+      pam_loginuid_required: false,
+      xrdp_autorun_xvnc: true,
+      xrdp_security_layer_tls: true,
+      pamtester: "preview",
+      ready: true,
+      mode: "preview",
+    }, null, 2));
+  }
 
   let file = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "");
   file = path.normalize(file);

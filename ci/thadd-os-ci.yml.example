@@ -33,6 +33,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Static RDP login-path assertions (no Docker)
+        run: bash scripts/ci/test_static.sh
+
       - name: Build THADD OS image (identical to Railway's build)
         run: docker build -t thadd-os .
 
@@ -98,3 +101,11 @@ jobs:
           docker logs thadd 2>&1 | tail -n 120 || true
           echo "--- supervisor status ---"
           docker exec thadd supervisorctl status 2>&1 || true
+          echo "--- login-status ---"
+          docker exec thadd cat /opt/thadd/login-status.json 2>&1 || true
+          echo "--- xrdp-sesman.log ---"
+          docker exec thadd tail -n 60 /var/log/xrdp-sesman.log 2>&1 || true
+          echo "--- xrdp.log ---"
+          docker exec thadd tail -n 60 /var/log/xrdp.log 2>&1 || true
+          echo "--- pam ---"
+          docker exec thadd cat /etc/pam.d/xrdp-sesman 2>&1 || true

@@ -43,6 +43,10 @@ doctor() {
     chk() { # chk <label> <condition>
         if eval "$2" >/dev/null 2>&1; then printf '%b\n' "  ${CG}✔${C0} $1"; else printf '%b\n' "  ${CR}✘${C0} $1"; fi
     }
+    local user="${THADD_USER:-thadd}"
+    local home
+    home="$(getent passwd "$user" 2>/dev/null | cut -d: -f6)"
+    home="${home:-/home/$user}"
     chk "portal (nginx)          " "curl -fsS --max-time 4 http://127.0.0.1:${PORT:-8080}/healthz"
     chk "RDP server (xrdp)       " "(exec 3<>/dev/tcp/127.0.0.1/3389)"
     chk "browser desktop (Xvnc)  " "pgrep -x Xvnc || pgrep -x Xtigervnc"
@@ -51,10 +55,22 @@ doctor() {
     chk "session manager (sesman)" "pgrep -x xrdp-sesman"
     chk "websocket bridge        " "pgrep -f websockify"
     chk "system bus (dbus)       " "pgrep -x dbus-daemon"
+    chk "account password set    " "getent shadow \"$user\" | awk -F: '{exit (\$2 ~ /^\\\$/ ? 0 : 1)}'"
+    chk "VNC password file       " "test -s \"$home/.vnc/passwd\""
+    chk "PAM hardened (no loginuid required)" \
+        "! grep -E '^[[:space:]]*session[[:space:]]+required[[:space:]]+pam_loginuid' /etc/pam.d/xrdp-sesman"
+    chk "xrdp autorun=Xvnc       " "grep -E '^[[:space:]]*autorun=Xvnc' /etc/xrdp/xrdp.ini"
+    chk "xrdp security_layer=tls " "grep -E '^[[:space:]]*security_layer=tls' /etc/xrdp/xrdp.ini"
+    chk "user in tsusers         " "id -nG \"$user\" | grep -qw tsusers"
+    if command -v pamtester >/dev/null 2>&1 && [ -n "${THADD_PASSWORD:-}" ]; then
+        chk "PAM accepts credentials " \
+            "pamtester xrdp-sesman \"$user\" authenticate \"authtok=${THADD_PASSWORD}\""
+    fi
     local memfree
     memfree="$(awk '/MemAvailable/{printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null)"
     printf '%b\n' "  ${CD}available memory: ${C0}${memfree} MB"
     printf '%b\n' "  ${CD}ip addresses:     ${C0}$(hostname -I 2>/dev/null | tr -s ' ')"
+    printf '%b\n' "  ${CD}login user:       ${C0}${user}"
     printf '%b\n' "\n${CY}All systems are supervised and auto-restart forever.${C0}"
 }
 

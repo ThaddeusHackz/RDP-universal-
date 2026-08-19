@@ -1,0 +1,32 @@
+#%PAM-1.0
+# =============================================================================
+#  THADD OS — container-safe PAM stack for xrdp-sesman
+#
+#  Debian's packaged /etc/pam.d/xrdp-sesman does:
+#      session  required  pam_loginuid.so
+#      session  include   common-session   (pulls pam_systemd)
+#
+#  Inside Docker / Railway, /proc/self/loginuid is immutable (EPERM) and
+#  systemd is not PID 1. A *required* pam_loginuid therefore aborts the PAM
+#  session AFTER the password has already been accepted — xrdp then reports
+#  "login failed for display 0" for a perfectly correct username/password.
+#
+#  This stack authenticates against the system shadow file and treats
+#  loginuid / systemd / keyring as best-effort.
+# =============================================================================
+
+auth       requisite    pam_nologin.so
+auth       required     pam_env.so
+auth       sufficient   pam_unix.so try_first_pass
+auth       required     pam_deny.so
+
+account    required     pam_unix.so
+
+password   required     pam_unix.so sha512 obscure
+
+session    optional     pam_loginuid.so
+session    optional     pam_keyinit.so force revoke
+session    optional     pam_limits.so
+session    optional     pam_umask.so
+session    optional     pam_env.so
+session    required     pam_unix.so

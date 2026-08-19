@@ -169,6 +169,20 @@ try:
 except Exception:
     check("GET /api/creds → JSON with username", False, f"[{status}] body={body[:80]!r}")
 
+status, body = get("/api/login-status")
+try:
+    info = json.loads(body)
+    check(
+        "GET /api/login-status → ready",
+        status == 200 and info.get("ready") is True,
+        f"[{status}] {info!r}"[:200],
+    )
+except Exception:
+    check("GET /api/login-status → ready", False, f"[{status}] body={body[:80]!r}")
+
+status, body = get("/desktop.html")
+check("GET /desktop.html → auto-login viewer", status == 200 and b"THADD OS" in body, f"[{status}]")
+
 # --- the real browser path: WebSocket → Xvnc ---------------------------------
 desktop_ok, info = wait_for_desktop()
 check(

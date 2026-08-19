@@ -11,9 +11,10 @@ into one always-on operating system.
 
 HOW TO USE IT
 ─────────────
- • This desktop runs in your browser (via the THADD portal)
-   AND in any RDP client (Microsoft Remote Desktop, Remmina,
-   FreeRDP, Jump Desktop...). Both reach the same OS.
+ • This desktop runs in your browser (via the THADD portal —
+   one click, you are signed in automatically) AND in any RDP
+   client (Microsoft Remote Desktop, Remmina, FreeRDP, Jump
+   Desktop...) with the username + password from the portal.
 
  • Terminal commands worth trying:
      thadd            system overview
