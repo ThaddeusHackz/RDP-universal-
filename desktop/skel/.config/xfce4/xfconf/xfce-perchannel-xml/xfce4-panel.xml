@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  THADD OS · hybrid taskbar
+  --------------------------------------------------------------------------
+  Windows 11 gave us the centred taskbar, the Start surface and the pill-shaped
+  focus rings. macOS gave us the dynamic dock and the menu-bar-right system
+  cluster. This layout fuses both:
+
+    [ Start(Whisker) ][ Search ][ Tasks ][ Files ][ Terminal ][ Browser ]
+            ......  WORKSPACE (centred)  ......
+    [ SysMon ] [ Net ] [ Clock ] [ System tray ] [ Notifications ]
+
+  Panel 1 = the fused taskbar (centred, translucent, 44px, Win11 metrics)
+  Panel 2 = the macOS-style top menu bar (app menu + global status)
+-->
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <value type="int" value="2"/>
+    <property name="panel-1" type="empty">
+      <property name="position" type="string" value="p=6;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="size" type="uint" value="44"/>
+      <property name="length-adjust" type="bool" value="true"/>
+      <property name="icon-size" type="uint" value="22"/>
+      <property name="background-style" type="uint" value="1"/>
+      <property name="background-rgba" type="array">
+        <value type="double" value="0.06"/>
+        <value type="double" value="0.07"/>
+        <value type="double" value="0.10"/>
+        <value type="double" value="0.82"/>
+      </property>
+      <property name="enter-opacity" type="uint" value="100"/>
+      <property name="leave-opacity" type="uint" value="100"/>
+      <property name="disable-struts" type="bool" value="false"/>
+      <property name="autohide-behavior" type="uint" value="0"/>
+      <property name="plugin-ids" type="array">
+        <value type="int" value="1"/>
+        <value type="int" value="2"/>
+        <value type="int" value="3"/>
+        <value type="int" value="4"/>
+        <value type="int" value="5"/>
+        <value type="int" value="6"/>
+        <value type="int" value="20"/>
+        <value type="int" value="21"/>
+        <value type="int" value="7"/>
+        <value type="int" value="8"/>
+        <value type="int" value="9"/>
+        <value type="int" value="10"/>
+        <value type="int" value="11"/>
+      </property>
+    </property>
+    <property name="panel-2" type="empty">
+      <property name="position" type="string" value="p=10;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="size" type="uint" value="28"/>
+      <property name="length-adjust" type="bool" value="true"/>
+      <property name="icon-size" type="uint" value="16"/>
+      <property name="background-style" type="uint" value="1"/>
+      <property name="background-rgba" type="array">
+        <value type="double" value="0.04"/>
+        <value type="double" value="0.05"/>
+        <value type="double" value="0.08"/>
+        <value type="double" value="0.66"/>
+      </property>
+      <property name="plugin-ids" type="array">
+        <value type="int" value="30"/>
+        <value type="int" value="31"/>
+        <value type="int" value="32"/>
+        <value type="int" value="33"/>
+        <value type="int" value="34"/>
+        <value type="int" value="35"/>
+      </property>
+    </property>
+  </property>
+
+  <!-- ============ panel 1 plugins: the fused taskbar ============ -->
+  <property name="plugins" type="empty">
+
+    <!-- Start surface: Whisker menu, Arc-Dark material, Win11 search-on-open -->
+    <property name="plugin-1" type="string" value="whiskermenu">
+      <property name="button-icon" type="string" value="thadd-start"/>
+      <property name="button-title" type="string" value="Start"/>
+      <property name="show-button-title" type="bool" value="false"/>
+      <property name="button-single-row" type="bool" value="true"/>
+      <property name="menu-width" type="uint" value="620"/>
+      <property name="menu-height" type="uint" value="640"/>
+      <property name="view-mode" type="int" value="0"/>
+      <property name="view-as-icons" type="bool" value="false"/>
+      <property name="position-search-alternate" type="bool" value="true"/>
+      <property name="position-categories-alternate" type="bool" value="true"/>
+      <property name="search-actions" type="int" value="1"/>
+      <property name="item-icon-size" type="uint" value="28"/>
+      <property name="favorites" type="array">
+        <value type="string" value="thadd-ai-gui.desktop"/>
+        <value type="string" value="firefox-esr.desktop"/>
+        <value type="string" value="chromium.desktop"/>
+        <value type="string" value="kitty.desktop"/>
+        <value type="string" value="xfce4-terminal.desktop"/>
+        <value type="string" value="thunar.desktop"/>
+        <value type="string" value="code.desktop"/>
+        <value type="string" value="thadd-security.desktop"/>
+        <value type="string" value="thadd-scan.desktop"/>
+        <value type="string" value="thadd-toolbox.desktop"/>
+        <value type="string" value="wireshark.desktop"/>
+        <value type="string" value="xfce4-settings-manager.desktop"/>
+        <value type="string" value="gparted.desktop"/>
+        <value type="string" value="libreoffice-writer.desktop"/>
+      </property>
+      <property name="recent" type="array"/>
+      <property name="category-icon-size" type="uint" value="20"/>
+    </property>
+
+    <!-- Search: rofi-backed Spotlight surface -->
+    <property name="plugin-2" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thadd-spotlight.desktop"/>
+      </property>
+    </property>
+
+    <!-- Window buttons: grouped, macOS/11 hybrid indicator -->
+    <property name="plugin-3" type="string" value="tasklist">
+      <property name="show-labels" type="bool" value="false"/>
+      <property name="grouping" type="bool" value="true"/>
+      <property name="show-handle" type="bool" value="false"/>
+      <property name="show-wireframes" type="bool" value="false"/>
+      <property name="flat-buttons" type="bool" value="true"/>
+      <property name="window-scrolling" type="bool" value="true"/>
+      <property name="middle-click" type="int" value="1"/>
+      <property name="sort-order" type="uint" value="4"/>
+      <property name="urgent-hint" type="uint" value="3"/>
+    </property>
+
+    <!-- Workspace switcher: discrete Win11 dots -->
+    <property name="plugin-4" type="string" value="pager">
+      <property name="rows" type="uint" value="1"/>
+      <property name="workspace-scrolling" type="bool" value="true"/>
+      <property name="miniature-view" type="bool" value="false"/>
+      <property name="num-rows" type="uint" value="1"/>
+    </property>
+
+    <!-- Snap layouts: drag-target tiles, the Win11 superpower -->
+    <property name="plugin-20" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thadd-snap.desktop"/>
+      </property>
+    </property>
+
+    <!-- Show desktop / Expo: corner hitbox like macOS Mission Control -->
+    <property name="plugin-21" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thadd-expo.desktop"/>
+      </property>
+    </property>
+
+    <property name="plugin-5" type="string" value="separator">
+      <property name="expand" type="bool" value="true"/>
+      <property name="style" type="uint" value="0"/>
+    </property>
+
+    <!-- System cluster (Windows 11 right side) -->
+    <property name="plugin-6" type="string" value="systemload">
+      <property name="update-interval" type="uint" value="2"/>
+      <property name="cpu" type="empty">
+        <property name="enabled" type="bool" value="true"/>
+        <property name="color" type="array">
+          <value type="double" value="0.286"/>
+          <value type="double" value="0.776"/>
+          <value type="double" value="1.0"/>
+          <value type="double" value="1.0"/>
+        </property>
+      </property>
+      <property name="memory" type="empty">
+        <property name="enabled" type="bool" value="true"/>
+        <property name="color" type="array">
+          <value type="double" value="0.596"/>
+          <value type="double" value="0.412"/>
+          <value type="double" value="1.0"/>
+          <value type="double" value="1.0"/>
+        </property>
+      </property>
+    </property>
+
+    <property name="plugin-7" type="string" value="pulseaudio">
+      <property name="enable-keyboard-shortcuts" type="bool" value="true"/>
+      <property name="show-notifications" type="bool" value="true"/>
+    </property>
+
+    <property name="plugin-8" type="string" value="systray">
+      <property name="icon-size" type="uint" value="18"/>
+      <property name="square-icons" type="bool" value="true"/>
+      <property name="symbolic-icons" type="bool" value="false"/>
+      <property name="known-items" type="array">
+        <value type="string" value="nm-applet"/>
+        <value type="string" value="blueman"/>
+        <value type="string" value="thadd-ai-agent"/>
+        <value type="string" value="xfce4-power-manager"/>
+        <value type="string" value="clipman"/>
+      </property>
+    </property>
+
+    <property name="plugin-9" type="string" value="clock">
+      <property name="digital-layout" type="uint" value="3"/>
+      <property name="digital-time-format" type="string" value="%H:%M"/>
+      <property name="digital-date-format" type="string" value="%a %d %b"/>
+      <property name="digital-time-font" type="string" value="Inter Semi-Bold 11"/>
+      <property name="digital-date-font" type="string" value="Inter 9"/>
+      <property name="tooltip-format" type="string" value="%A %d %B %Y — week %V"/>
+    </property>
+
+    <property name="plugin-10" type="string" value="notification">
+      <property name="notification-icon-size" type="uint" value="16"/>
+    </property>
+
+    <property name="plugin-11" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="thadd-shutdown.desktop"/>
+      </property>
+    </property>
+  </property>
+
+  <!-- ============ panel 2 plugins: the macOS top bar ============ -->
+  <property name="plugin-30" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="thadd-apple-menu.desktop"/>
+    </property>
+  </property>
+  <property name="plugin-31" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="thadd-ai-gui.desktop"/>
+    </property>
+  </property>
+  <property name="plugin-32" type="string" value="separator">
+    <property name="expand" type="bool" value="true"/>
+  </property>
+  <property name="plugin-33" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="thadd-control-center.desktop"/>
+    </property>
+  </property>
+  <property name="plugin-34" type="string" value="string" value="systray">
+    <property name="icon-size" type="uint" value="14"/>
+    <property name="square-icons" type="bool" value="true"/>
+  </property>
+  <property name="plugin-35" type="string" value="clock">
+    <property name="digital-layout" type="uint" value="1"/>
+    <property name="digital-time-format" type="string" value="%a %d %b  %H:%M"/>
+    <property name="digital-time-font" type="string" value="Inter Medium 10"/>
+  </property>
+</channel>

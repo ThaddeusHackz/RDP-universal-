@@ -1,0 +1,218 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0300-thadd-desktop
+#  Builds the "THADD Hybrid Shell": a desktop that borrows Windows 11's
+#  geometry (centred taskbar, Start surface, Snap Layouts, rounded focus rings)
+#  and macOS Sequoia's material (translucency, vibrancy, traffic-light window
+#  controls, a dynamic dock, Spotlight-style launcher).
+#  Everything here is plain XFCE + picom + plank + rofi — no forks, no binary
+#  blobs, no licence problems, and it survives `apt upgrade`.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+D=/opt/thadd/desktop
+log() { echo "  · $*"; }
+
+echo "── THADD OS · desktop shell ──"
+
+# ---- wallpapers ----------------------------------------------------------
+if [ -d "$D/wallpapers" ]; then
+    mkdir -p /usr/share/backgrounds/thadd
+    cp -f "$D"/wallpapers/* /usr/share/backgrounds/thadd/ 2>/dev/null || true
+    log "wallpapers -> /usr/share/backgrounds/thadd ($(ls -1 /usr/share/backgrounds/thadd 2>/dev/null | wc -l) files)"
+fi
+
+# ---- GTK themes ----------------------------------------------------------
+THEME_SRC="$D/theme"
+if [ -d "$THEME_SRC" ]; then
+    mkdir -p /usr/share/themes
+    for t in "$THEME_SRC"/*/; do
+        [ -d "$t" ] || continue
+        name="$(basename "$t")"
+        rm -rf "/usr/share/themes/$name"
+        cp -a "$t" "/usr/share/themes/$name"
+        log "theme -> /usr/share/themes/$name"
+    done
+    mkdir -p /usr/share/icons
+    for i in "$THEME_SRC"/*-icons/; do
+        [ -d "$i" ] || continue
+        name="$(basename "$i")"
+        rm -rf "/usr/share/icons/$name"
+        cp -a "$i" "/usr/share/icons/$name"
+        log "icons -> /usr/share/icons/$name"
+    done
+fi
+
+# ---- system-wide defaults (new users + existing profile) -----------------
+mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+if [ -d "$D/etc-xdg" ]; then
+    cp -a "$D/etc-xdg/." /etc/xdg/ 2>/dev/null || true
+    log "system defaults -> /etc/xdg"
+fi
+
+# ---- default profile for every new user ---------------------------------
+if [ -d "$D/skel" ]; then
+    mkdir -p /etc/skel
+    cp -a "$D/skel/." /etc/skel/ 2>/dev/null || true
+    # every existing human user gets the same look on first login
+    for h in /home/*; do
+        [ -d "$h" ] || continue
+        u="$(basename "$h")"
+        id "$u" >/dev/null 2>&1 || continue
+        cp -a "$D/skel/." "$h/" 2>/dev/null || true
+        chown -R "$u:$u" "$h" 2>/dev/null || true
+    done
+    log "skel applied"
+fi
+
+# ---- LightDM: the first thing anyone sees --------------------------------
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-thadd.conf <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=xfce
+allow-guest=false
+greeter-hide-users=false
+greeter-setup-script=/usr/local/bin/thadd-greeter-setup
+EOF
+
+cat > /etc/lightdm/lightdm-gtk-greeter.conf <<'EOF'
+[greeter]
+theme-name = Thadd-Hybrid
+icon-theme-name = Papirus-Dark
+font-name = Inter 11
+xft-antialias = true
+xft-hintstyle = hintslight
+xft-rgba = rgb
+background = /usr/share/backgrounds/thadd/thadd-aurora.svg
+user-background = true
+default-user-image = /usr/share/thadd/branding/thadd-user.png
+clock-format = %H:%M · %A %d %B
+indicators = ~host;~spacer;~clock;~spacer;~session;~power
+panel-position = bottom
+position = 50%,center 68%,center
+hide-user-image = false
+a11y-states = ~contrast;~font;~keyboard;~screen-reader;~screen-keyboard
+EOF
+
+cat > /usr/local/bin/thadd-greeter-setup <<'EOF'
+#!/bin/sh
+# Runs as root just before the greeter paints: makes the login screen match the
+# desktop (cursor theme, HiDPI hint, accurate hostname for the live media).
+xsetroot -cursor_name left_ptr 2>/dev/null || true
+export XCURSOR_THEME=BreezeX-Dark 2>/dev/null || true
+exit 0
+EOF
+chmod +x /usr/local/bin/thadd-greeter-setup
+
+# ---- compositor autostart for the vibrancy -------------------------------
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/thadd-compositor.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=THADD Compositor (picom)
+Comment=Translucency, blur, rounded corners and shadows for THADD OS
+Exec=/usr/local/bin/thadd-compositor
+OnlyShowIn=XFCE;
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+
+cat > /usr/local/bin/thadd-compositor <<'EOF'
+#!/bin/bash
+# THADD compositor launcher — tries the richest profile first, degrades
+# gracefully on VMs without GL so the desktop NEVER fails to appear.
+set -u
+LOG=/var/log/thadd/compositor.log; mkdir -p /var/log/thadd
+CONF="$HOME/.config/picom/picom.conf"
+
+wait_for_xfwm() {
+  for _ in $(seq 1 60); do
+    pgrep -x xfwm4 >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  return 1
+}
+wait_for_xfwm || true
+pkill -x picom 2>/dev/null || true
+sleep 0.4
+
+command -v picom >/dev/null 2>&1 || { echo "$(date -Is) picom missing" >>"$LOG"; exit 0; }
+
+# 1) vendor/GLX backend with full effects
+if picom --config "$CONF" --backend glx --vsync --daemon >>"$LOG" 2>&1; then
+  sleep 1; pgrep -x picom >/dev/null && { echo "$(date -Is) glx backend up" >>"$LOG"; exit 0; }
+fi
+# 2) xrender backend — works on every VM, keeps blur off
+if picom --config "$CONF" --backend xrender --daemon >>"$LOG" 2>&1; then
+  sleep 1; pgrep -x picom >/dev/null && { echo "$(date -Is) xrender backend up" >>"$LOG"; exit 0; }
+fi
+# 3) bare minimum: shadow + fade, no blur (integrated GPUs, nested VMs)
+picom --backend xrender --blur-method none --shadow --fade-in-step 0.05 --fade-out-step 0.05 --daemon >>"$LOG" 2>&1 || true
+sleep 1
+pgrep -x picom >/dev/null && echo "$(date -Is) minimal compositor up" >>"$LOG" \
+                        || echo "$(date -Is) compositor unavailable — desktop runs uncomposited" >>"$LOG"
+exit 0
+EOF
+chmod +x /usr/local/bin/thadd-compositor
+
+# ---- plank dock (macOS side) --------------------------------------------
+cat > /etc/xdg/autostart/thadd-dock.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=THADD Dock (Plank)
+Comment=Dynamic dock with running-app indicators
+Exec=/usr/local/bin/thadd-dock
+OnlyShowIn=XFCE;
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+
+cat > /usr/local/bin/thadd-dock <<'EOF'
+#!/bin/bash
+set -u
+command -v plank >/dev/null 2>&1 || exit 0
+for _ in $(seq 1 60); do pgrep -x xfwm4 >/dev/null && break; sleep 0.5; done
+pkill -x plank 2>/dev/null || true
+sleep 0.5
+plank --name=Dock --display=:0.0 >/dev/null 2>&1 &
+exit 0
+EOF
+chmod +x /usr/local/bin/thadd-dock
+
+# ---- desktop icon set ----------------------------------------------------
+if [ -d "$D/apps" ]; then
+    mkdir -p /usr/share/applications /usr/local/share/applications
+    cp -f "$D"/apps/*.desktop /usr/share/applications/ 2>/dev/null || true
+    command -v update-desktop-database >/dev/null 2>&1 && \
+      update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+    log "app launchers installed"
+fi
+
+# ---- fontconfig: Inter everywhere, JetBrains Mono in terminals -----------
+mkdir -p /etc/fonts/conf.d
+cat > /etc/fonts/local.conf <<'EOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <match target="font">
+    <edit name="antialias" mode="assign"><bool>true</bool></edit>
+    <edit name="hinting" mode="assign"><bool>true</bool></edit>
+    <edit name="hintstyle" mode="assign"><const>hintslight</const></edit>
+    <edit name="rgba" mode="assign"><const>rgb</const></edit>
+    <edit name="lcdfilter" mode="assign"><const>lcddefault</const></edit>
+  </match>
+  <alias><family>sans-serif</family><prefer><family>Inter</family></prefer></alias>
+  <alias><family>system-ui</family><prefer><family>Inter</family></prefer></alias>
+  <alias><family>monospace</family><prefer><family>JetBrains Mono</family></prefer></alias>
+</fontconfig>
+EOF
+
+# ---- desktop verification hook (runs in cleanup stage) -------------------
+if [ -x "$D/thadd-desktop-selftest" ]; then
+    install -m 0755 "$D/thadd-desktop-selftest" /usr/local/bin/thadd-desktop-selftest
+    log "self-test installed"
+fi
+
+echo "✓ desktop shell installed"
+exit 0

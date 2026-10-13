@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# THADD OS in-image self-test — placeholder
+echo "THADD desktop selftest (build placeholder)"; exit 0

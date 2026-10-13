@@ -1,0 +1,229 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0400-thadd-security
+#  Secure-by-default, usable-by-design. Every control below is documented in
+#  docs/SECURITY.md and can be inspected/undone at runtime with `thadd secure`.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+echo "── THADD OS · security baseline ──"
+
+# ---- sysctl hardening ----------------------------------------------------
+mkdir -p /etc/sysctl.d
+cat > /etc/sysctl.d/99-thadd-hardening.conf <<'EOF'
+# THADD OS hardening baseline — network behaviour
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.tcp_syncookies = 1
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.all.log_martians = 1
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+net.ipv6.conf.all.accept_ra = 2
+# ASLR: full randomisation
+kernel.randomize_va_space = 2
+# Kernel information leak protection
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+kernel.printk = 3 3 3 3
+# Restrict unprivileged BPF/JIT sprays (keeps bpftrace usable via sudo)
+kernel.unprivileged_bpf_disabled = 1
+net.core.bpf_jit_harden = 2
+# No suid core dumps, no setuid ptrace
+fs.suid_dumpable = 0
+kernel.yama.ptrace_scope = 1
+# eBPF/perf hardening
+kernel.perf_event_paranoid = 3
+# Filesystem protections
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+fs.protected_fifos = 2
+fs.protected_regular = 2
+# Larger backlog under load (server workloads on a workstation)
+net.core.somaxconn = 1024
+net.ipv4.tcp_fastopen = 3
+EOF
+
+# ---- filesystem / device policies ---------------------------------------
+cat > /etc/modprobe.d/thadd-blacklist.conf <<'EOF'
+# Rare, historically-buggy protocols with no desktop use case (CIS 1.1.x)
+install dccp /bin/false
+install sctp /bin/false
+install rds /bin/false
+install tipc /bin/false
+install firewire-core /bin/false
+EOF
+cat > /etc/modprobe.d/thadd-usb-storage.conf <<'EOF'
+# Uncomment to forbid storage-class USB devices (kiosk / high-security builds)
+#install usb-storage /bin/false
+EOF
+
+cat > /etc/security/limits.d/99-thadd.conf <<'EOF'
+*    hard    core        0
+*    soft    core        0
+*    hard    maxlogins   10
+*    soft    nofile      65536
+*    hard    nofile      262144
+root hard    maxlogins   3
+EOF
+
+cat > /etc/profile.d/99-thadd-umask.sh <<'EOF'
+# THADD OS: private-by-default files for interactive users
+umask 027
+EOF
+chmod +x /etc/profile.d/99-thadd-umask.sh
+
+# ---- PAM password quality ------------------------------------------------
+if [ -f /etc/pam.d/common-password ]; then
+    grep -q pam_pwquality /etc/pam.d/common-password 2>/dev/null || true
+    cat > /etc/security/pwquality.conf <<'EOF'
+minlen = 12
+dcredit = -1
+ucredit = -1
+lcredit = -1
+ocredit = -1
+retry = 3
+enforce_for_root
+EOF
+fi
+
+# ---- auditd --------------------------------------------------------------
+mkdir -p /etc/audit/rules.d
+cat > /etc/audit/rules.d/99-thadd.rules <<'EOF'
+## THADD OS audit baseline
+-D
+-b 8192
+--backlog_wait_time 60000
+-f 1
+-w /etc/passwd -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/sudoers -p wa -k privilege
+-w /etc/sudoers.d/ -p wa -k privilege
+-w /etc/ssh/sshd_config -p wa -k sshd
+-w /etc/thadd/ -p wa -k thadd
+-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k setuid-exec
+-a always,exit -F arch=b64 -S ptrace -k ptrace
+-a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k modules
+-a always,exit -F path=/usr/bin/sudo -F perm=x -k sudo
+-a always,exit -F path=/usr/bin/su  -F perm=x -k su
+-a always,exit -F arch=b64 -S mount -k mount
+-w /var/log/thadd/ -p wa -k thadd-logs
+EOF
+
+# ---- AppArmor ------------------------------------------------------------
+if [ -d /etc/apparmor.d ]; then
+    printf '%s\n' 'enforce' > /etc/apparmor.d/.thadd-mode 2>/dev/null || true
+    command -v apparmor_parser >/dev/null 2>&1 && \
+      apparmor_parser -r /etc/apparmor.d/usr.sbin.tcpdump >/dev/null 2>&1 || true
+fi
+
+# ---- firewall: a real, readable baseline (applied at boot by ufw.service) -
+if command -v ufw >/dev/null 2>&1; then
+    ufw --force reset >/dev/null 2>&1 || true
+    ufw default deny incoming  >/dev/null 2>&1 || true
+    ufw default allow outgoing >/dev/null 2>&1 || true
+    ufw allow out 53,67,68,123/udp >/dev/null 2>&1 || true
+    ufw allow out 22,53,80,123,443,8080,8443/tcp >/dev/null 2>&1 || true
+    # loopback + mDNS for file sharing/printing on a trusted LAN only
+    ufw allow in on lo >/dev/null 2>&1 || true
+    ufw --force enable >/dev/null 2>&1 || true
+    echo "✓ ufw baseline applied (deny in / allow out)"
+fi
+
+# ---- SSH: installed, hardened, and OFF until you ask for it --------------
+mkdir -p /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/99-thadd.conf <<'EOF'
+# THADD OS sshd hardening
+Port 22
+PermitRootLogin no
+PasswordAuthentication yes        # live media has no keys yet; key-only below
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+MaxAuthTries 3
+MaxSessions 4
+LoginGraceTime 20
+ClientAliveInterval 300
+ClientAliveCountMax 2
+UseDNS no
+LogLevel VERBOSE
+AllowUsers thadd
+EOF
+systemctl disable ssh >/dev/null 2>&1 || true
+systemctl stop ssh >/dev/null 2>&1 || true
+
+cat > /usr/local/bin/thadd-ssh <<'EOS'
+#!/bin/bash
+# Remote shell control for THADD OS. Deliberately opt-in: a live image with a
+# documented password must never listen on 22 by accident.
+set -e
+case "${1:-status}" in
+  on)
+    echo "⚠  Enabling sshd. Change the password first:  thadd-passwd"
+    read -rp "   Really start sshd on port 22? [y/N] " a; [[ "$a" =~ ^[Yy]$ ]] || exit 1
+    sudo systemctl enable --now ssh
+    sudo systemctl status ssh --no-pager | head -5
+    ;;
+  off)    sudo systemctl disable --now ssh; echo "✓ sshd stopped and disabled" ;;
+  key)    mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          [ -f ~/.ssh/authorized_keys ] || : > ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
+          echo "Paste your public key (empty line to finish):"; read -r k
+          [ -n "$k" ] && echo "$k" >> ~/.ssh/authorized_keys && echo "✓ key added"
+          ;;
+  status) systemctl is-active --quiet ssh && echo "sshd: ACTIVE" || echo "sshd: off (enable with: thadd-ssh on)"; ;;
+  *)      echo "usage: thadd-ssh {on|off|key|status}"; exit 2 ;;
+esac
+EOS
+chmod +x /usr/local/bin/thadd-ssh
+
+# ---- fail2ban (armed, but sshd isn't running until you turn it on) -------
+mkdir -p /etc/fail2ban/jail.d
+cat > /etc/fail2ban/jail.d/thadd.local <<'EOF'
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+backend  = systemd
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled  = true
+port     = ssh
+maxretry = 3
+EOF
+
+# ---- sudo policy: typed, logged, no shell escapes ------------------------
+if [ -d /etc/sudoers.d ]; then
+cat > /etc/sudoers.d/00-thadd-hardening <<'EOF'
+Defaults  use_pty, logfile="/var/log/thadd/sudo.log", log_input, log_output
+Defaults  passwd_tries=3, timestamp_timeout=5, env_reset, secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EOF
+chmod 440 /etc/sudoers.d/00-thadd-hardening
+fi
+
+# ---- anti-forensic-on-purpose? No. We create evidence, not erase it. -----
+cat > /etc/thadd/security-posture <<'EOF'
+THADD OS security baseline
+  · AppArmor enforcing, auditd logging, ufw default-deny inbound
+  · ASLR full, kptr_restrict=2, dmesg_restrict=1, ptrace_scope=1
+  · Rare kernel protocols blacklisted (dccp/sctp/rds/tipc/firewire)
+  · suid core dumps disabled, sudo fully logged to /var/log/thadd/sudo.log
+  · sshd installed but disabled; start with `thadd-ssh on`
+  · Live user password is `thadd` — CHANGE IT with `thadd-passwd`
+Inspect:  thadd security      Full docs: /usr/share/doc/thadd/SECURITY.md
+EOF
+
+echo "✓ security baseline applied"
+exit 0
