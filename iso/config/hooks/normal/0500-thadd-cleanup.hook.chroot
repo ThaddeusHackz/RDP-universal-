@@ -1,0 +1,39 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0500-thadd-cleanup
+#  Shrink the image, run the in-image self-test, and fail loudly (only when
+#  THADD_ISO_STRICT=1) if the desktop the user is promised is not actually there.
+# =============================================================================
+set -u
+echo "── THADD OS · cleanup + self-test ──"
+
+# ---- shrink --------------------------------------------------------------
+apt-get clean >/dev/null 2>&1 || true
+rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
+rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+find /var/log -type f -name '*.log' -size +1M -delete 2>/dev/null || true
+# changelogs are the single biggest doc payload on a Debian live image
+find /usr/share/doc -maxdepth 2 -name 'changelog*' -type f -delete 2>/dev/null || true
+find /usr/share/doc -maxdepth 2 -name 'NEWS*' -type f -delete 2>/dev/null || true
+rm -rf /usr/share/doc/*/examples 2>/dev/null || true
+# locale + man pruning (English desktop ships; other locales installed by user)
+rm -rf /usr/share/locale/*/LC_MESSAGES/*.mo 2>/dev/null || true
+mkdir -p /var/log/thadd
+
+# ---- runtime directories the live system expects -------------------------
+mkdir -p /var/log/thadd /var/lib/thadd /run/thadd
+chmod 755 /var/log/thadd /var/lib/thadd
+touch /var/log/thadd/README
+
+# ---- in-image self-test --------------------------------------------------
+if [ -x /usr/local/bin/thadd-desktop-selftest ]; then
+    /usr/local/bin/thadd-desktop-selftest --image-build > /etc/thadd/selfcheck.txt 2>&1 || true
+    echo "── self-check ──"; cat /etc/thadd/selfcheck.txt
+    if [ "${THADD_ISO_STRICT:-0}" = "1" ] && grep -q '^FAIL' /etc/thadd/selfcheck.txt; then
+        echo "✗ strict mode: self-check reported failures"; exit 1
+    fi
+fi
+
+echo "✓ cleanup complete"
+exit 0

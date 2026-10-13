@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# THADD OS control centre — placeholder, real implementation lands in the next commit
+echo "THADD OS control centre (build placeholder)"; exit 0

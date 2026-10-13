@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THADD OS — Desktop</title>
+<meta name="description" content="THADD OS live desktop">
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  :root { --bg:#05070d; --bar:#0b1220; --text:#e8ecf5; --muted:#8b95ab; --cyan:#22d3ee; --red:#f87171; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; background:var(--bg); color:var(--text);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif; overflow:hidden; }
+  #bar { position:fixed; top:0; left:0; right:0; z-index:20; height:40px;
+    display:flex; align-items:center; gap:12px; padding:0 14px;
+    background:var(--bar); border-bottom:1px solid rgba(255,255,255,.08); }
+  #bar img { width:22px; height:22px; border-radius:6px; }
+  #bar .name { font-weight:700; letter-spacing:.04em; font-size:.9rem; }
+  #bar .status { margin-left:auto; font-size:.78rem; color:var(--muted); }
+  #bar a { color:var(--cyan); text-decoration:none; font-size:.78rem; }
+  #screen { position:fixed; top:40px; left:0; right:0; bottom:0; background:#000; }
+  #screen > div { width:100% !important; height:100% !important; }
+  #overlay { position:fixed; inset:40px 0 0; z-index:10; display:flex;
+    align-items:center; justify-content:center; flex-direction:column; gap:14px;
+    background:rgba(5,7,13,.82); text-align:center; padding:24px; }
+  #overlay.hide { display:none; }
+  #overlay h1 { font-size:1.3rem; }
+  #overlay p { color:var(--muted); max-width:420px; }
+  #overlay .err { color:var(--red); }
+  #manual { display:none; margin-top:8px; }
+  #manual.show { display:block; }
+  #manual input { padding:10px 12px; border-radius:8px; border:1px solid #334;
+    background:#0b1220; color:var(--text); min-width:220px; }
+  #manual button { margin-left:8px; padding:10px 16px; border:0; border-radius:8px;
+    background:linear-gradient(92deg,#22d3ee,#818cf8); color:#04121a; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <img src="/logo.png" alt="">
+  <span class="name">THADD OS</span>
+  <span class="status" id="status">Signing you in…</span>
+  <a href="/">← Portal</a>
+</div>
+<div id="screen"></div>
+<div id="overlay">
+  <h1 id="ovTitle">Connecting to your desktop</h1>
+  <p id="ovMsg">Fetching credentials and opening the live XFCE session.</p>
+  <form id="manual" autocomplete="current-password" onsubmit="return window.__manual(event)">
+    <input id="pw" type="password" placeholder="Desktop password" autofocus>
+    <button type="submit">Connect</button>
+  </form>
+</div>
+<script type="module">
+  const status = document.getElementById("status");
+  const overlay = document.getElementById("overlay");
+  const ovTitle = document.getElementById("ovTitle");
+  const ovMsg = document.getElementById("ovMsg");
+  const manual = document.getElementById("manual");
+  let rfb = null;
+  let password = "";
+
+  function showManual(msg) {
+    ovTitle.textContent = "Password required";
+    ovMsg.textContent = msg || "Enter the password shown on the portal.";
+    ovMsg.classList.add("err");
+    manual.classList.add("show");
+    overlay.classList.remove("hide");
+    status.textContent = "Waiting for password";
+  }
+
+  window.__manual = (ev) => {
+    ev.preventDefault();
+    password = document.getElementById("pw").value || "";
+    ovMsg.classList.remove("err");
+    ovTitle.textContent = "Connecting to your desktop";
+    ovMsg.textContent = "Using the password you entered.";
+    manual.classList.remove("show");
+    connect();
+    return false;
+  };
+
+  async function loadPassword() {
+    try {
+      const r = await fetch("/api/creds", { cache: "no-store" });
+      const c = await r.json();
+      password = c.password || "";
+    } catch (e) {
+      password = "";
+    }
+  }
+
+  async function connect() {
+    status.textContent = "Connecting…";
+    try {
+      const mod = await import("/vnc/core/rfb.js");
+      const RFB = mod.default;
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url = proto + "//" + location.host + "/websockify";
+      if (rfb) { try { rfb.disconnect(); } catch (e) { /* ignore */ } }
+      rfb = new RFB(document.getElementById("screen"), url, {
+        credentials: { password: password },
+        wsProtocols: ["binary"]
+      });
+      rfb.scaleViewport = true;
+      rfb.clipViewport = false;
+      rfb.background = "#05070d";
+      rfb.addEventListener("connect", () => {
+        overlay.classList.add("hide");
+        status.textContent = "Connected";
+      });
+      rfb.addEventListener("disconnect", (ev) => {
+        const clean = ev.detail && ev.detail.clean;
+        status.textContent = clean ? "Disconnected" : "Reconnecting…";
+        overlay.classList.remove("hide");
+        ovTitle.textContent = clean ? "Disconnected" : "Reconnecting";
+        ovMsg.textContent = clean
+          ? "The desktop session ended."
+          : "Lost the live desktop — retrying in 2 seconds.";
+        if (!clean) setTimeout(connect, 2000);
+      });
+      rfb.addEventListener("credentialsrequired", () => {
+        if (password) {
+          rfb.sendCredentials({ password: password });
+        } else {
+          showManual("The desktop asked for a password.");
+        }
+      });
+      rfb.addEventListener("securityfailure", () => {
+        showManual("That password was rejected. Use the password from the portal.");
+      });
+    } catch (e) {
+      // Module import failed (unexpected noVNC layout) — fall back to stock UI
+      // with the password in the query string so the user is still signed in.
+      const params = new URLSearchParams({
+        autoconnect: "1",
+        resize: "scale",
+        reconnect: "1",
+        reconnect_delay: "2000",
+        path: "websockify",
+        show_dot: "true"
+      });
+      if (password) params.set("password", password);
+      location.replace("/vnc/vnc.html?" + params.toString());
+    }
+  }
+
+  await loadPassword();
+  if (!password) {
+    showManual("Could not load /api/creds. Type the desktop password to continue.");
+  } else {
+    connect();
+  }
+</script>
+</body>
+</html>

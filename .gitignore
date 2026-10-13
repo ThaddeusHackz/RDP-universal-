@@ -9,21 +9,9 @@ out/
 
 # python
 __pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
+*.pyc
 
-# runtime state of the OS / the service
-.thadd/
-*.log
-*.tmp
-
-# editors / os
-.DS_Store
-Thumbs.db
-*.swp
-
-# keep hand-made art that ships with the OS
-!thadd/shell/apps/**/*.svg
-!thadd/shell/apps/**/*.png
+# test harness
+tools/tests/node_modules/
+tools/tests/bundle.js
+tools/tests/package-lock.json

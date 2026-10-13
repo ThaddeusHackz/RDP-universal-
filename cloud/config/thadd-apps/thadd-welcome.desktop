@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Welcome to THADD OS
+Comment=Show the THADD OS welcome banner
+Exec=xfce4-terminal --hide-menubar --hide-toolbar --title="Welcome to THADD OS" -e "thadd welcome"
+Icon=help-about
+Terminal=false
+Categories=System;Utility;

@@ -1,0 +1,11 @@
+#!/bin/sh
+# THADD OS — VNC desktop session (browser access path)
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+export DISPLAY="${DISPLAY:-:1}"
+
+if [ -x /opt/thadd/session.sh ]; then
+    exec /opt/thadd/session.sh
+fi
+exec startxfce4

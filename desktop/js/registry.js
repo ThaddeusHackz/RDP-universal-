@@ -1,0 +1,176 @@
+/* =============================================================================
+ * THADD OS 2.0 — registry.js
+ * The application catalogue: 60+ launchable apps, indexed by Spotlight,
+ * the Launchpad, the dock and JARVIS.  Each entry is metadata only; the
+ * implementation lives in js/apps/*.js and is bound in js/apps/index.js.
+ * ========================================================================== */
+
+export const APPS = [
+  /* ------------------------------- system ------------------------------- */
+  { id: "finder", name: "Files", icon: "🗂", cls: "i-files", cat: "System", dock: true,
+    desc: "Browse, preview and manage the THADD OS filesystem" },
+  { id: "terminal", name: "Terminal", icon: "»", cls: "i-terminal", cat: "System", dock: true, key: "⌘T",
+    desc: "zsh 5.9 · 120+ builtins · real command engine" },
+  { id: "powershell", name: "PowerShell", icon: "PS", cls: "i-shell", cat: "System", dock: true,
+    desc: "PowerShell 7.4 Core with object pipeline + Get-* cmdlets" },
+  { id: "settings", name: "System Settings", icon: "⚙", cls: "i-settings", cat: "System", dock: true,
+    desc: "Appearance, Shield, network, AI, users, updates" },
+  { id: "monitor", name: "Activity Monitor", icon: "📈", cls: "i-monitor", cat: "System",
+    desc: "Live CPU / RAM / disk / network / GPU telemetry" },
+  { id: "store", name: "App Store", icon: "🛍", cls: "i-store", cat: "System", dock: true,
+    desc: "1,400+ curated packages: dev, security, AI, browsers" },
+  { id: "launchpad", name: "Launchpad", icon: "🚀", cls: "i-thadd", cat: "System", dock: true,
+    desc: "A grid of every installed application" },
+  { id: "about", name: "About THADD OS", icon: "ℹ", cls: "i-thadd", cat: "System",
+    desc: "Version, kernel, hardware and licence details" },
+  { id: "guide", name: "THADD Guide", icon: "📖", cls: "i-notes", cat: "System", dock: true,
+    desc: "The complete manual: ISO build, VirtualBox, toolchain" },
+  { id: "softwareupdate", name: "Software Update", icon: "⬇", cls: "i-settings", cat: "System",
+    desc: "Rolling-release channel · Nebula Prime" },
+  { id: "screenshot", name: "Screenshot", icon: "📷", cls: "i-camera", cat: "System",
+    desc: "Capture the desktop, a window, or a region" },
+  { id: "bootpicker", name: "Boot Manager", icon: "🖥", cls: "i-settings", cat: "System",
+    desc: "GRUB entries: THADD OS, Windows 11, macOS, Ubuntu, Debian, Parrot" },
+
+  /* --------------------------------- AI --------------------------------- */
+  { id: "jarvis", name: "JARVIS AI", icon: "✦", cls: "i-ai", cat: "AI", dock: true, key: "⌘J",
+    desc: "Groq-powered agent — reads/writes files, runs commands, controls the OS" },
+  { id: "ai-lab", name: "AI Lab", icon: "🧠", cls: "i-ai", cat: "AI",
+    desc: "Model playground: Llama 3.3, Mixtral, Gemma2, Whisper, LLaVA" },
+  { id: "copilot", name: "AI Copilot", icon: "✧", cls: "i-ai", cat: "AI",
+    desc: "Fluent side-panel assistant attached to every window" },
+
+  /* ------------------------------ security ------------------------------ */
+  { id: "parrot", name: "Parrot Arsenal", icon: "🦜", cls: "i-parrot", cat: "Security", dock: true,
+    desc: "600+ offensive-security tools, HackTheBox-ready, one-click runner" },
+  { id: "shield", name: "THADD Shield", icon: "🛡", cls: "i-vault", cat: "Security",
+    desc: "Kernel hardening, firewall, IDS, zero-trust vault, threat radar" },
+  { id: "vault", name: "Zero-Trust Vault", icon: "🔐", cls: "i-vault", cat: "Security",
+    desc: "Hardware-backed secret store with browser-kDF encryption" },
+  { id: "forensics", name: "Forensics Suite", icon: "🔬", cls: "i-monitor", cat: "Security",
+    desc: "Autopsy, Volatility3, Sleuthkit, Binwalk — artefact triage" },
+  { id: "packetlab", name: "Packet Lab", icon: "📡", cls: "i-monitor", cat: "Security",
+    desc: "Wireshark-style capture, decode and replay tooling" },
+  { id: "hackbox", name: "HackTheBox", icon: "🎯", cls: "i-parrot", cat: "Security",
+    desc: "VPN profiles, machine tracker, flags and writeups" },
+
+  /* ------------------------------ developer ----------------------------- */
+  { id: "editor", name: "Code Studio", icon: "⌨", cls: "i-editor", cat: "Developer", dock: true,
+    desc: "VS Code-compatible editor with IntelliSense, git and run" },
+  { id: "git", name: "Git Console", icon: "⑂", cls: "i-shell", cat: "Developer",
+    desc: "Full git porcelain: branch, commit, merge, rebase, worktree" },
+  { id: "docker", name: "Containers", icon: "🐳", cls: "i-shell", cat: "Developer",
+    desc: "Podman/Docker engine, compose stacks, image builder" },
+  { id: "dbg", name: "Debugger", icon: "🐞", cls: "i-editor", cat: "Developer",
+    desc: "gdb/lldb front-end with breakpoints and memory inspector" },
+  { id: "apiweb", name: "API Tester", icon: "🔌", cls: "i-editor", cat: "Developer",
+    desc: "Postman-style request builder for REST and GraphQL" },
+  { id: "jupyter", name: "Jupyter Lab", icon: "📓", cls: "i-ai", cat: "Developer",
+    desc: "Notebooks with NumPy, pandas, PyTorch CUDA-ready kernels" },
+  { id: "sqlite", name: "DB Browser", icon: "🗄", cls: "i-editor", cat: "Developer",
+    desc: "SQLite/Postgres explorer with query console" },
+
+  /* -------------------------------- apps -------------------------------- */
+  { id: "browser", name: "Firefox", icon: "🦊", cls: "i-browser", cat: "Internet", dock: true,
+    desc: "Firefox 131 with uBlock, Multi-Account Containers, THADD DNS" },
+  { id: "browser-chrome", name: "Chrome", icon: "🌐", cls: "i-browser", cat: "Internet",
+    desc: "Chromium 131 with THADD Shield extension" },
+  { id: "browser-brave", name: "Brave", icon: "🦁", cls: "i-browser", cat: "Internet",
+    desc: "Brave 1.71 — ad-blocking by default" },
+  { id: "browser-tor", name: "Tor Browser", icon: "🧅", cls: "i-browser", cat: "Internet",
+    desc: "Tor 14 — onion routing, .onion resolution, anti-fingerprinting" },
+  { id: "mail", name: "Mail", icon: "✉", cls: "i-mail", cat: "Internet",
+    desc: "IMAP/PGP mail client with encrypted search" },
+  { id: "chat", name: "Messages", icon: "💬", cls: "i-mail", cat: "Internet",
+    desc: "Matrix + Signal bridges" },
+  { id: "vpn", name: "THADD VPN", icon: "🌍", cls: "i-parrot", cat: "Internet",
+    desc: "WireGuard profiles, HTB/THM labs, kill-switch" },
+
+  /* -------------------------------- media ------------------------------- */
+  { id: "music", name: "Music", icon: "🎵", cls: "i-music", cat: "Media", dock: true,
+    desc: "Offline library, FLAC, visualiser" },
+  { id: "videos", name: "Videos", icon: "🎬", cls: "i-media", cat: "Media",
+    desc: "MPV-based player, 4K, subtitles" },
+  { id: "photos", name: "Photos", icon: "🖼", cls: "i-camera", cat: "Media",
+    desc: "Gallery with EXIF, on-device AI tagging" },
+  { id: "camera", name: "Camera", icon: "📹", cls: "i-camera", cat: "Media",
+    desc: "Webcam capture with THADD face-blur privacy mode" },
+  { id: "screenrec", name: "Screen Recorder", icon: "⏺", cls: "i-media", cat: "Media",
+    desc: "Record / stream the desktop (used for the README demo)" },
+  { id: "draw", name: "Draw", icon: "🖌", cls: "i-notes", cat: "Media",
+    desc: "Vector + raster sketching with tablet pressure" },
+  { id: "presenter", name: "Slides", icon: "📊", cls: "i-store", cat: "Productivity",
+    desc: "Decks, export to PDF/PPTX" },
+
+  /* ---------------------------- productivity ---------------------------- */
+  { id: "notes", name: "Notes", icon: "📝", cls: "i-notes", cat: "Productivity", dock: true,
+    desc: "Markdown notes with ⌘K search" },
+  { id: "calendar", name: "Calendar", icon: "📅", cls: "i-store", cat: "Productivity",
+    desc: "CalDAV, focus modes, time-blocking" },
+  { id: "tasks", name: "Reminders", icon: "✅", cls: "i-notes", cat: "Productivity",
+    desc: "Tasks, habits, pomodoro timer" },
+  { id: "calc", name: "Calculator", icon: "🧮", cls: "i-calc", cat: "Productivity",
+    desc: "Scientific, programmer and unit-conversion modes" },
+  { id: "sheet", name: "Spreadsheets", icon: "📈", cls: "i-store", cat: "Productivity",
+    desc: "1M rows, formulas, pivot tables" },
+  { id: "office", name: "Documents", icon: "📄", cls: "i-editor", cat: "Productivity",
+    desc: "Writer — DOCX/ODT with tracked changes" },
+  { id: "pdf", name: "PDF Studio", icon: "📕", cls: "i-media", cat: "Productivity",
+    desc: "Annotate, sign, redact, OCR" },
+  { id: "clock", name: "Clock", icon: "⏰", cls: "i-store", cat: "Productivity",
+    desc: "World clocks, alarms, stopwatch, timers" },
+  { id: "weather", name: "Weather", icon: "⛅", cls: "i-store", cat: "Productivity",
+    desc: "Live forecast for Accra and the world" },
+  { id: "maps", name: "Maps", icon: "🗺", cls: "i-monitor", cat: "Productivity",
+    desc: "OSM vector maps, offline tiles" },
+  { id: "translate", name: "Translate", icon: "🌐", cls: "i-ai", cat: "Productivity",
+    desc: "95 languages, offline neural packs" },
+
+  /* ------------------------------- system 2 ----------------------------- */
+  { id: "trash", name: "Trash", icon: "🗑", cls: "i-trash", cat: "System", dock: true,
+    desc: "Recover or shred deleted items (secure erase)" },
+  { id: "disks", name: "Disk Utility", icon: "💽", cls: "i-settings", cat: "System",
+    desc: "Partitions, LUKS encryption, SMART health" },
+  { id: "network", name: "Network", icon: "📶", cls: "i-settings", cat: "System",
+    desc: "Wi-Fi, Ethernet, DNS-over-HTTPS, per-app firewall" },
+  { id: "bluetooth", name: "Bluetooth", icon: "🔵", cls: "i-settings", cat: "System",
+    desc: "Pair audio, input and IoT devices" },
+  { id: "printers", name: "Printers", icon: "🖨", cls: "i-settings", cat: "System",
+    desc: "CUPS queue management" },
+  { id: "users", name: "Users & Groups", icon: "👥", cls: "i-settings", cat: "System",
+    desc: "Accounts, sudo policy, guest mode" },
+  { id: "power", name: "Power & Battery", icon: "🔋", cls: "i-settings", cat: "System",
+    desc: "Thermals, governor, hibernation" },
+  { id: "logs", name: "Console", icon: "📃", cls: "i-monitor", cat: "System",
+    desc: "journalctl stream, kernel ring buffer, audit log" },
+  { id: "cronjobs", name: "Automation", icon: "⚡", cls: "i-shell", cat: "System",
+    desc: "Cron, systemd timers, THADD flows" },
+  { id: "recorder", name: "Accessibility", icon: "♿", cls: "i-settings", cat: "System",
+    desc: "VoiceOver-class reader, magnifier, colour filters" },
+];
+
+export const BY_ID = Object.fromEntries(APPS.map((a) => [a.id, a]));
+
+export const DOCK_DEFAULT = [
+  "finder", "launchpad", "browser", "mail", "terminal", "editor", "jarvis",
+  "parrot", "store", "settings", "__sep", "music", "photos", "guide",
+];
+
+export const SEARCH_PLACES = [
+  { id: "g", name: "Google", url: "https://www.google.com/search?q=", icon: "🔎" },
+  { id: "ddg", name: "DuckDuckGo", url: "https://duckduckgo.com/?q=", icon: "🦆" },
+  { id: "gh", name: "GitHub", url: "https://github.com/search?q=", icon: "🐙" },
+  { id: "so", name: "Stack Overflow", url: "https://stackoverflow.com/search?q=", icon: "📚" },
+  { id: "yt", name: "YouTube", url: "https://www.youtube.com/results?search_query=", icon: "▶" },
+  { id: "exploit", name: "Exploit-DB", url: "https://www.exploit-db.com/search?q=", icon: "💥" },
+  { id: "htb", name: "HackTheBox", url: "https://app.hackthebox.com/search?q=", icon: "🎯" },
+];
+
+export const WALLPAPERS = [
+  { id: "sequoia", name: "Sequoia Aurora", css: "" },
+  { id: "ventura", name: "Ventura Swirl", css: "radial-gradient(120% 100% at 20% 20%, #ff7a18 0%, transparent 55%), radial-gradient(120% 120% at 80% 30%, #af002d 0%, transparent 55%), linear-gradient(160deg, #101024, #2b1055)" },
+  { id: "monterey", name: "Monterey Depth", css: "radial-gradient(120% 110% at 30% 15%, #12c2e9 0%, transparent 55%), radial-gradient(130% 120% at 80% 80%, #c471ed 0%, transparent 55%), linear-gradient(160deg, #05070f, #1b1f3b)" },
+  { id: "bloom", name: "Windows Bloom", css: "radial-gradient(90% 80% at 50% 45%, #0078d4 0%, transparent 60%), linear-gradient(200deg, #001a3a, #003f7f 60%, #0b84ff)" },
+  { id: "matrix", name: "Parrot Trace", css: "repeating-linear-gradient(0deg, rgba(0,255,170,.05) 0 2px, transparent 2px 4px), radial-gradient(120% 120% at 50% 0%, #052e2b 0%, #04120f 70%)" },
+  { id: "void", name: "Void", css: "linear-gradient(160deg, #05060b, #0c0f1a 60%, #05060b)" },
+];

@@ -1,0 +1,38 @@
+# Starship prompt — THADD OS theme
+format = """
+$username\
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$line_break\
+$character"""
+
+[username]
+show_always = true
+style_user = "bold cyan"
+style_root = "bold red"
+format = "[$user]($style) "
+
+[hostname]
+ssh_only = false
+style = "bold purple"
+format = "@[$hostname]($style) "
+
+[directory]
+style = "bold blue"
+truncation_length = 4
+truncate_to_repo = false
+
+[git_branch]
+style = "bold yellow"
+format = "on [$symbol$branch]($style) "
+symbol = "🌱 "
+
+[git_status]
+style = "bold green"
+format = '([\[$all_status$ahead_behind\]]($style) )'
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[✗](bold red)"

@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  THADD OS · thadd-shell-session
+# -----------------------------------------------------------------------------
+#  The X session the live ISO boots into: THADD Shell as a native desktop.
+#
+#    xfwm4            → real window management (dialogs, floating native apps)
+#    xfsettingsd      → keyboard shortcuts (Ctrl+Alt+T real terminal, PrtSc …)
+#    python3 server   → serves the shell on 127.0.0.1:8787  + /bridge API
+#    browser --kiosk  → Chromium (Fluent/Blur-capable) else Firefox ESR
+#
+#  If no browser exists, or the user exits kiosk mode (Ctrl+Alt+X / the dock's
+#  "Leave kiosk" tile / bridge action), we hand the seat to XFCE — a light,
+#  fully-populated fallback desktop rather than a black screen. Zero black
+#  screens is the whole point: a live ISO that boots to nothing looks broken.
+# =============================================================================
+set -u
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+LOG_DIR=/var/log/thadd; mkdir -p "$LOG_DIR" 2>/dev/null || true
+LOG="$LOG_DIR/session.log"
+log() { printf '%s %s\n' "$(date -Is)" "$*" >>"$LOG" 2>/dev/null || true; }
+
+USER_NAME="$(id -un)"
+SHELL_ROOT=/opt/thadd/desktop
+PORT="${THADD_SHELL_PORT:-8787}"
+URL="http://127.0.0.1:${PORT}/"
+rm -f /tmp/thadd-leave-kiosk
+
+log "session start: user=$USER_NAME display=${DISPLAY:-:0}"
+
+# ---- 1. window manager + settings daemon (best effort, never fatal) --------
+pgrep -x xfwm4 >/dev/null 2>&1 || { xfwm4 --replace --daemon >>"$LOG" 2>&1 || log "xfwm4 unavailable"; }
+for _ in $(seq 1 40); do pgrep -x xfwm4 >/dev/null 2>&1 && break; sleep 0.25; done
+pgrep -x xfsettingsd >/dev/null 2>&1 || { xfsettingsd --daemon >>"$LOG" 2>&1 || true; }
+pgrep -x xfce4-power-manager >/dev/null 2>&1 || { xfce4-power-manager --daemon >>"$LOG" 2>&1 || true; }
+
+# wallpaper under the shell (visible during load, and in XFCE fallback)
+if command -v xfconf-query >/dev/null 2>&1; then
+  for p in /usr/share/backgrounds/thadd/*; do
+    [ -f "$p" ] && { xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$p" >>"$LOG" 2>&1 || true; break; }
+  done
+fi
+xsetroot -solid "#04060f" 2>/dev/null || true
+
+# ---- 2. static server + native bridge -------------------------------------
+pkill -f thadd-desktop-server >/dev/null 2>&1 || true
+python3 /usr/local/bin/thadd-desktop-server >>"$LOG" 2>&1 &
+SERVER_PID=$!
+for _ in $(seq 1 60); do
+  if python3 - "$PORT" <<'PY' 2>/dev/null
+import socket, sys
+s = socket.socket(); s.settimeout(0.4)
+s.connect(("127.0.0.1", int(sys.argv[1]))); s.close()
+PY
+  then break; fi
+  sleep 0.25
+done
+log "server pid=$SERVER_PID on port $PORT"
+
+# ---- 3. pick a browser ----------------------------------------------------
+KIOSK=""
+if command -v chromium >/dev/null 2>&1; then
+  KIOSK="chromium --kiosk --app=$URL --no-first-run --no-default-browser-check \
+--disable-features=Translate,TranslateUI,MediaRouter,OptimizationHints,HeavyAdIntervention \
+--disable-pinch --overscroll-history-navigation=0 --disable-dev-shm-usage \
+--user-data-dir=$HOME/.config/thadd-shell --window-size=1920,1080 --start-maximized \
+--force-device-scale-factor=1 --enable-features=OverlayScrollbar --password-store=basic"
+elif command -v chromium-browser >/dev/null 2>&1; then
+  KIOSK="chromium-browser --kiosk --app=$URL --no-first-run --no-default-browser-check \
+--user-data-dir=$HOME/.config/thadd-shell --window-size=1920,1080"
+elif command -v firefox-esr >/dev/null 2>&1; then
+  KIOSK="firefox-esr --kiosk --new-instance --profile $HOME/.config/thadd-firefox $URL"
+elif command -v firefox >/dev/null 2>&1; then
+  KIOSK="firefox --kiosk --new-instance --profile $HOME/.config/thadd-firefox $URL"
+fi
+
+if [ -z "$KIOSK" ]; then
+  log "no browser found — XFCE fallback"
+  if command -v xfce4-session >/dev/null 2>&1; then exec xfce4-session; fi
+  if command -v xterm >/dev/null 2>&1; then exec xterm -fa Monospace -fs 11 -e /opt/thadd/tools/thadd-welcome; fi
+  exec /bin/bash --login
+fi
+
+# ---- 4. run kiosk; supervise ----------------------------------------------
+log "kiosk: $KIOSK"
+# shellcheck disable=SC2086
+eval "$KIOSK" >>"$LOG" 2>&1 &
+KIOSK_PID=$!
+
+# a heartbeat: if the browser dies on its own, bring back a working desktop
+( for _ in $(seq 1 900); do
+    if ! kill -0 "$KIOSK_PID" 2>/dev/null; then
+      if [ -e /tmp/thadd-leave-kiosk ]; then
+        log "kiosk exit requested by user → XFCE"; rm -f /tmp/thadd-leave-kiosk
+        pkill -f thadd-desktop-server >/dev/null 2>&1 || true
+        command -v xfce4-session >/dev/null 2>&1 && exec xfce4-session
+      fi
+      log "browser exited unexpectedly → restarting shell in 2s"
+      sleep 2
+      eval "$KIOSK" >>"$LOG" 2>&1 &
+      KIOSK_PID=$!
+    fi
+    sleep 1
+  done ) &
+
+wait "$KIOSK_PID" 2>/dev/null || true
+if [ -e /tmp/thadd-leave-kiosk ]; then
+  log "kiosk closed → XFCE fallback"
+  pkill -f thadd-desktop-server >/dev/null 2>&1 || true
+  if command -v xfce4-session >/dev/null 2>&1; then exec xfce4-session; fi
+fi
+log "session ending"
+pkill -f thadd-desktop-server >/dev/null 2>&1 || true
+exit 0

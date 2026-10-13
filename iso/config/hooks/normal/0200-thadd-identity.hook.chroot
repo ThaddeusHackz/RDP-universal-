@@ -1,0 +1,174 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0200-thadd-identity
+#  The system must call itself THADD OS everywhere a human or a script looks:
+#  /etc/os-release, lsb, motd, issue, hostname, neofetch, fastfetch, GRUB.
+#  Also creates the live user, sudo policy and the THADD directory contract.
+# =============================================================================
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+
+THADD=/opt/thadd
+VERSION="$(sed -n 's/^THADD_OS_VERSION=//p' "$THADD/build-info" 2>/dev/null | head -1)"
+CODENAME="$(sed -n 's/^THADD_OS_CODENAME=//p' "$THADD/build-info" 2>/dev/null | head -1)"
+: "${VERSION:=rolling}"; : "${CODENAME:=aurora}"
+
+echo "── THADD OS · identity ${VERSION} (${CODENAME}) ──"
+
+# ---- os-release family ---------------------------------------------------
+cat > /etc/os-release <<EOF
+PRETTY_NAME="THADD OS ${VERSION} (${CODENAME})"
+NAME="THADD OS"
+VERSION="${VERSION} (${CODENAME})"
+VERSION_ID="${VERSION}"
+VERSION_CODENAME=${CODENAME}
+ID=thadd
+ID_LIKE="debian ubuntu parrot kali"
+HOME_URL="https://github.com/ThaddeusHackz/RDP-universal-"
+SUPPORT_URL="https://github.com/ThaddeusHackz/RDP-universal-/issues"
+BUG_REPORT_URL="https://github.com/ThaddeusHackz/RDP-universal-/issues"
+PRIVACY_POLICY_URL="https://github.com/ThaddeusHackz/RDP-universal-"
+LOGO=thadd-logo
+ANSI_COLOR="38;2;0;194;255"
+THADD_BUILD="$(cat /etc/thadd/build-info 2>/dev/null | tr '\n' ' ')"
+EOF
+cp -f /etc/os-release /usr/lib/os-release
+
+cat > /etc/lsb-release <<EOF
+DISTRIB_ID="THADD OS"
+DISTRIB_RELEASE="${VERSION}"
+DISTRIB_CODENAME=${CODENAME}
+DISTRIB_DESCRIPTION="THADD OS ${VERSION} (${CODENAME}) — One OS. Every Capability."
+EOF
+
+cat > /etc/debian_version <<EOF
+bookworm/sid (THADD OS ${VERSION} "${CODENAME}" base)
+EOF
+
+cat > /etc/issue <<EOF
+
+  ████████╗██╗  ██╗ █████╗ ██████╗ ██████╗      ██████╗ ███████╗
+  ╚══██╔══╝██║  ██║██╔══██╗██╔══██╗██╔══██╗    ██╔═══██╗██╔════╝
+     ██║   ███████║███████║██║  ██║██║  ██║    ██║   ██║███████╗
+     ██║   ██╔══██║██╔══██║██║  ██║██║  ██║    ██║   ██║╚════██║
+     ██║   ██║  ██║██║  ██║██████╔╝██████╔╝    ╚██████╔╝███████║
+     ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═════╝      ╚═════╝ ╚══════╝
+        THADD OS ${VERSION} "${CODENAME}"  ·  \n  \l  ·  hybrid desktop shell
+        Sign in as \e[1;36mthadd\e[0m — SSH is off until you run: \e[1;36mthadd-ssh on\e[0m
+
+EOF
+cp -f /etc/issue /etc/issue.net
+
+cat > /etc/motd <<EOF
+
+    THADD OS ${VERSION} "${CODENAME}"
+    ────────────────────────────────────────────────────────────
+     · thadd              system control centre (status/doctor/ai)
+     · thadd-ai chat      Groq-powered assistant for this machine
+     · thadd-ai gui       desktop assistant window
+     · thadd-scan         forensic snapshot of this system
+     · thadd-toolbox      install offensive/RE tools on demand
+     · thadd-ssh on       enable remote shell (off by default)
+     · rea --help         reverse engineering (binaries/Electron/.NET)
+    ────────────────────────────────────────────────────────────
+     One OS. Every capability. Docs: /usr/share/doc/thadd/
+
+EOF
+
+# ---- hostname contract ---------------------------------------------------
+echo "thadd-os" > /etc/hostname
+sed -i -e '/thadd-os/d' /etc/hosts 2>/dev/null || true
+cat >> /etc/hosts <<'EOF'
+127.0.1.1   thadd-os thadd-os.local
+EOF
+
+# ---- neofetch / fastfetch branding --------------------------------------
+mkdir -p /etc/neofetch /etc/fastfetch
+cat > /etc/neofetch/config.conf <<'EOF'
+print_info() {
+  info title
+  info underline
+  info "OS" distro
+  info "Host" model
+  info "Kernel" kernel
+  info "Uptime" uptime
+  info "Shell" shell
+  info "DE" de
+  info "WM" wm
+  info "CPU" cpu
+  info "GPU" gpu
+  info "Memory" memory
+}
+EOF
+cat > /etc/fastfetch/config.jsonc <<'EOF'
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": { "source": "/usr/share/thadd/branding/thadd-ascii.txt", "type": "file", "padding": { "top": 1, "left": 2 } },
+  "display": { "separator": "  " },
+  "modules": [
+    "title", "separator", "os", "host", "kernel", "uptime", "packages",
+    "shell", "display", "de", "wm", "terminal", "cpu", "gpu", "memory",
+    "disk", "localip", "battery", "poweradapter", "locale", "break", "colors"
+  ]
+}
+EOF
+
+# ---- directories + THADD contract ---------------------------------------
+mkdir -p /usr/share/thadd/branding /usr/share/thadd/packages /opt/thadd
+mkdir -p /var/log/thadd /var/lib/thadd
+mkdir -p /etc/thadd
+install -d -m 0700 /root
+
+cat > /etc/thadd/build-info <<EOF
+THADD_OS_VERSION=${VERSION}
+THADD_OS_CODENAME=${CODENAME}
+THADD_OS_BASE=Debian 12 bookworm
+THADD_OS_DESKTOP=THADD Hybrid Shell (XFCE + picom + plank)
+THADD_OS_BUILT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+cat > /etc/thadd-release <<EOF
+THADD OS ${VERSION} (${CODENAME})
+Codename : ${CODENAME}
+Base     : Debian 12 "bookworm" · live/hybrid BIOS+UEFI
+Kernel   : $(uname -r 2>/dev/null || echo linux)
+Desktop  : THADD Hybrid Shell — Windows 11 geometry × macOS Sequoia material
+Assist   : THADD AI (Groq and any OpenAI-compatible provider)
+Offensive: THADD Security Suite + Parrot/Kali Toolbox
+Reverse  : REA (rea-agents) — binaries, Electron, .NET, websites
+EOF
+
+# ---- live user -----------------------------------------------------------
+groupadd -f thadd 2>/dev/null || true
+if ! id thadd >/dev/null 2>&1; then
+    useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth,scanner,cdrom,floppy,disk,adm thadd 2>/dev/null \
+      || useradd -m -s /bin/bash -G sudo thadd
+fi
+printf 'thadd:thadd\n' | chpasswd 2>/dev/null || true
+# Live-image convention: full sudo for the live user, documented and auditable.
+echo 'thadd ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/10-thadd-live
+chmod 440 /etc/sudoers.d/10-thadd-live
+rm -f /etc/sudoers.d/thadd 2>/dev/null || true
+
+# Live media is passwordless by design; force a password change on install.
+cat > /usr/local/bin/thadd-passwd <<'EOS'
+#!/bin/bash
+set -e
+read -rsp "New password for $(whoami): " p; echo
+read -rsp "Confirm: " q; echo
+[ "$p" = "$q" ] || { echo "mismatch"; exit 1; }
+printf '%s:%s\n' "$(whoami)" "$p" | sudo chpasswd
+echo "✓ password updated — remember: the live default 'thadd' is public knowledge"
+EOS
+chmod +x /usr/local/bin/thadd-passwd
+
+# ---- banner tool ---------------------------------------------------------
+cat > /usr/share/thadd/branding/thadd-ascii.txt <<'EOF'
+      ▄▄▄▄▄▄▄▄  ▄  ▄  ▄▄▄▄  ▄▄▄▄▄  ▄▄▄▄
+         ██     ██████  ██  ██ ██  ██ ██  ██
+         ██     ██  ██  ██████ ██  ██ ██  ██
+         ██     ██  ██  ██  ██ ██  ██ ██  ██
+         ██     ██  ██  ██  ██ ██████ ██████
+EOF
+
+echo "✓ identity written (THADD OS ${VERSION} ${CODENAME})"
+exit 0

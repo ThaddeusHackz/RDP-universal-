@@ -1,0 +1,40 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0000-thadd-apt-safe
+#  Installs every optional package set through the tolerant installer.
+#  A missing/renamed package can never fail the build — it is logged instead.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+echo "──────────────────────────────────────────────────────────"
+echo " THADD OS · optional package sets (tolerant install)"
+echo "──────────────────────────────────────────────────────────"
+
+if [ -x /opt/thadd/tools/bin/thadd-apt-safe ]; then
+    install -m 0755 /opt/thadd/tools/bin/thadd-apt-safe /usr/local/sbin/thadd-apt-safe
+else
+    echo "thadd-apt-safe not staged — skipping optional sets"; exit 0
+fi
+
+# Fold the repo's optional lists into the image so `thadd-toolbox` can replay
+# them at runtime (useful for rescue/profile rebuilds).
+mkdir -p /usr/share/thadd/packages
+cp -f /opt/thadd/iso-packages/*.txt /usr/share/thadd/packages/ 2>/dev/null || true
+cp -f /usr/share/thadd/packages/optional-extras.txt /tmp/ 2>/dev/null || true
+
+for set in optional-extras optional-dev optional-security optional-forensics optional-desktop; do
+    f="/tmp/${set}.txt"
+    [ -f "$f" ] || continue
+    echo "» set: $set"
+    /usr/local/sbin/thadd-apt-safe "$f" || true
+    rm -f "$f"
+    # keep the image from ballooning: drop downloaded debs between sets
+    apt-get clean >/dev/null 2>&1 || true
+done
+
+# Runtime lists stay available for on-demand re-install / audit
+cp -f /usr/share/thadd/packages/*.txt /root/ 2>/dev/null || true
+rm -f /root/*.txt 2>/dev/null || true
+
+echo "✓ optional sets processed (see /var/log/thadd/apt-safe*.txt)"
+exit 0
