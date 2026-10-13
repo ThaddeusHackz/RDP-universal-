@@ -223,13 +223,33 @@ class Stager:
         self.symlink("usr/lib64/ld-linux-x86-64.so.2", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
         for support in ("/etc/nsswitch.conf", "/etc/ld.so.cache", "/etc/ld.so.conf",
                         "/etc/protocols", "/etc/services", "/etc/mime.types",
-                        "/etc/terminfo", "/usr/lib/terminfo", "/etc/skel",
+                        "/etc/terminfo", "/usr/lib/terminfo",
                         "/etc/inputrc", "/etc/bash.bashrc", "/etc/profile"):
             p = Path(support)
             if p.is_dir():
                 self.copy_tree(p)
             elif p.exists():
                 self.copy(Path(os.path.realpath(p)))
+
+        # 2b. /etc/skel: the small dotfiles only.  CI hosts keep entire SDKs in
+        #     there (GitHub's /etc/skel holds a 208 MB Rust/LLVM toolchain), and
+        #     copying that into a live image is how a 56 MB ISO becomes 413 MB.
+        skel = Path("/etc/skel")
+        if skel.is_dir():
+            self.mkdirs("etc/skel")
+            for entry in sorted(skel.iterdir()):
+                try:
+                    if entry.is_dir() or entry.is_symlink() or entry.stat().st_size > 128 * 1024:
+                        continue
+                except OSError:
+                    continue
+                dst = self.dest / "etc" / "skel" / entry.name
+                try:
+                    shutil.copy2(entry, dst)
+                    self.copied[str(dst)] = entry.stat().st_size
+                    self.bytes += entry.stat().st_size
+                except OSError:
+                    pass
 
         # 3. Python
         for py in (f"/usr/bin/{PY_BIN}", "/usr/bin/python3"):

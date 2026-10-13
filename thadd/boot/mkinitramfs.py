@@ -114,6 +114,7 @@ def build(root: Path, out_path: Path, compress: str = "none",
     compress = (compress or "none").lower()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_suffix(out_path.suffix + ".raw")
+    keep_raw = os.environ.get("THADD_KEEP_RAW") == "1"
 
     if compress in ("gz", "gzip"):
         raw = gzip.open(tmp, "wb", compresslevel=6)
@@ -156,6 +157,11 @@ def build(root: Path, out_path: Path, compress: str = "none",
 
     tmp.replace(out_path)
     meta["size"] = out_path.stat().st_size
+    if not keep_raw:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
     if not quiet:
         print(f"  initramfs  {meta['files']:>6} entries  "
               f"{meta['raw_bytes'] / 1e6:8.1f} MB raw  {meta['size'] / 1e6:8.1f} MB "
