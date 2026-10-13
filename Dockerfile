@@ -144,6 +144,15 @@ RUN chmod +x /etc/xrdp/startwm.sh /opt/thadd/session.sh /opt/thadd/welcome.sh \
 # The Nebula Prime shell is the portal; the v1 portal stays available at /v1/
 COPY desktop/                    /opt/thadd/web/
 COPY cloud/web/                  /opt/thadd/web/v1/
+# The classic portal keeps working at the root too: /desktop.html and
+# /style.css are linked from older docs, from the Railway portal page and from
+# the CI end-to-end test, and they must not 404 just because the tree moved
+# under cloud/.  (index.html intentionally stays the desktop/ shell.)
+COPY cloud/web/desktop.html /opt/thadd/web/desktop.html
+COPY cloud/web/style.css    /opt/thadd/web/style.css
+COPY cloud/web/app.js       /opt/thadd/web/app.js
+COPY cloud/web/logo.png     /opt/thadd/web/logo.png
+COPY cloud/web/favicon.png  /opt/thadd/web/favicon.png
 COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/
 
 # ---------------------------------------------------------------------------

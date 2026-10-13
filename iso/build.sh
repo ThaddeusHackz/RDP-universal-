@@ -150,16 +150,25 @@ lb config
 #     an obsolete security mirror is what turns a build into 404s at the very
 #     end, after an hour of work).
 # ---------------------------------------------------------------------------
-if [[ -f config/common ]]; then
-  log "effective live-build configuration"
-  grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|DEBOOTSTRAP|BOOTLOADERS|INITSYSTEM)=' config/common \
-    | sed 's/^/    /' || true
+log "effective live-build configuration"
+for f in config/bootstrap config/common config/binary; do
+  [[ -f "$f" ]] || continue
+  echo "  --- $f"
+  grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_BOOTSTRAP|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|DEBOOTSTRAP|BOOTLOADERS|INITSYSTEM)=' "$f" | sed 's/^/      /' || true
+done
 
-  force() { # force <VAR> <value>
-    if grep -q "^$1=" config/common; then
-      sed -i "s|^$1=.*|$1=\"$2\"|" config/common
-    else
-      echo "$1=\"$2\"" >> config/common
+if [[ -f config/common ]]; then
+  force() { # force <VAR> <value>   - in every config file that declares it
+    local var="$1" val="$2" f
+    for f in config/bootstrap config/common config/binary; do
+      [[ -f "$f" ]] || continue
+      if grep -q "^$var=" "$f"; then
+        sed -i "s|^$var=.*|$var=\"$val\"|" "$f"
+      fi
+    done
+    # bootstrap needs the distribution even when it did not set one
+    if [[ "$var" == "LB_DISTRIBUTION" ]] && ! grep -q "^LB_DISTRIBUTION=" config/bootstrap 2>/dev/null; then
+      echo "$var=\"$val\"" >> config/bootstrap
     fi
   }
   force LB_DISTRIBUTION "bookworm"
@@ -168,8 +177,13 @@ if [[ -f config/common ]]; then
   force LB_MIRROR_CHROOT_SECURITY "http://security.debian.org/debian-security/"
   force LB_MIRROR_BINARY "http://deb.debian.org/debian/"
   force LB_MIRROR_BINARY_SECURITY "http://security.debian.org/debian-security/"
-  echo "  LB_MIRROR_CHROOT_SECURITY=\"http://security.debian.org/debian-security/\"" > /dev/null
-  ok "suite + mirrors pinned to bookworm (they are printed above, before the fix-up)"
+  ok "suite + mirrors pinned to bookworm (printed above, before the fix-up)"
+  log "after the fix-up"
+  for f in config/bootstrap config/common; do
+    [[ -f "$f" ]] || continue
+    echo "  --- $f"
+    grep -E '^LB_(DISTRIBUTION|MIRROR_BOOTSTRAP|MIRROR_CHROOT_SECURITY)=' "$f" | sed 's/^/      /' || true
+  done
 else
   warn "no config/common after lb config - live-build printed its own diagnostics above"
 fi

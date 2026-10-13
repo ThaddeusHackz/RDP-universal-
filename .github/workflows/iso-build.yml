@@ -50,9 +50,11 @@ jobs:
             -e THADD_VERSION="${THADD_VERSION:-}" \
             -e DEBIAN_FRONTEND=noninteractive \
             debian:bookworm bash -c '
+              echo "container: $( . /etc/os-release; echo $PRETTY_NAME ) / debian_version=$(cat /etc/debian_version)"
               apt-get update -qq && apt-get install -y -qq live-build debootstrap xorriso \
                 squashfs-tools mtools dosfstools rsync isolinux syslinux-common \
                 grub-efi-amd64-bin grub-pc-bin grub-common >/dev/null
+              echo "live-build: $(lb --version | head -1)"; echo "live-build package: $(dpkg-query -W -f=\'\${Version}\' live-build 2>/dev/null)"
               bash -x ./iso/build.sh' 2>&1 | tee dist/desktop-build-trace.log
         # A failed desktop build must not stop the live ISO from being released
         # (thadd-iso.yml is what publishes that one).  When this fails, the log
@@ -60,6 +62,8 @@ jobs:
 
       - name: Build log (on failure) - committed so it is readable from anywhere
         if: steps.build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p docs/reports
           {
