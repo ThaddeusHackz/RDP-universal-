@@ -123,12 +123,14 @@ jobs:
           retention-days: 30
 
       - name: Publish Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        # publish from a version tag, from a manual run, or from this branch's
+        # builds (the release is upserted, so it always carries the newest ISO)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish || github.ref == 'refs/heads/arena/6e1ad65e-rdp-universal'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          case "$TAG" in v*) ;; *) TAG="v1.0.$(date -u +%Y%m%d%H%M)" ;; esac
+          case "$TAG" in v*) ;; *) TAG="v1.0" ;; esac
           gh release view "$TAG" >/dev/null 2>&1 || \
             gh release create "$TAG" --title "THADD OS ${TAG#v}" --notes-file build/iso/README.TXT
           gh release upload "$TAG" build/iso/*.iso build/iso/manifest.json build/iso/*.sha256 --clobber
