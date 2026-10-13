@@ -31,17 +31,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: live-build toolchain
+      - name: live-build toolchain (Debian 12's own, in a Debian 12 container)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq live-build debootstrap xorriso squashfs-tools \
-            mtools dosfstools rsync
-          lb --version
+          # Ubuntu's live-build is a 2015 snapshot that rejects this config, and
+          # THADD OS targets Debian 12 anyway - so the build runs in bookworm.
+          docker pull -q debian:bookworm
+          docker run --rm debian:bookworm bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq live-build >/dev/null && lb --version' 
 
       - name: Build THADD OS (desktop profile)
         id: build
         continue-on-error: true
-        run: sudo --preserve-env=THADD_PROFILE,THADD_VERSION ./iso/build.sh
+        run: |
+          set -o pipefail
+          mkdir -p dist
+          docker run --rm --privileged \
+            -v "$PWD:/work" -w /work \
+            -e THADD_PROFILE="${THADD_PROFILE:-desktop}" \
+            -e THADD_VERSION="${THADD_VERSION:-}" \
+            -e DEBIAN_FRONTEND=noninteractive \
+            debian:bookworm bash -c '
+              apt-get update -qq && apt-get install -y -qq live-build debootstrap xorriso \
+                squashfs-tools mtools dosfstools rsync isolinux syslinux-common \
+                grub-efi-amd64-bin grub-pc-bin grub-common >/dev/null
+              bash -x ./iso/build.sh' 2>&1 | tee dist/desktop-build-trace.log
         # A failed desktop build must not stop the live ISO from being released
         # (thadd-iso.yml is what publishes that one).  When this fails, the log
         # tail below is the fastest way to see why in the Actions UI.
@@ -62,7 +74,7 @@ jobs:
             ls -la dist/ 2>/dev/null || true
             echo "== ls iso =="
             ls -la iso/ 2>/dev/null | head -20
-            for f in dist/build.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
+            for f in dist/build.log dist/desktop-build-trace.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
               [ -f "$f" ] && { echo; echo "===== $f (last 150 lines) ====="; tail -n 150 "$f"; }
             done
             echo '```'
