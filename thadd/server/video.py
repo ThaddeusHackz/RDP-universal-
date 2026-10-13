@@ -111,9 +111,20 @@ class Canvas:
 
     # ------------------------------------------------------------------- helpers
     def rect(self, box, radius=12, fill=PANEL, outline=None, width=1, alpha=255):
-        fill_rgba = (*fill, alpha) if isinstance(fill, tuple) else fill
-        self.d.rounded_rectangle(box, radius=radius, fill=fill_rgba,
-                                 outline=outline, width=width)
+        # callers pass 3-tuples, 4-tuples (RGBA) or None - normalise both ends
+        def rgba(c):
+            if c is None or not isinstance(c, tuple):
+                return c
+            if len(c) == 4:
+                return c
+            if len(c) == 3:
+                return (*c, alpha)
+            if len(c) == 2:
+                return c[0]
+            return c[:4]
+
+        self.d.rounded_rectangle(box, radius=radius, fill=rgba(fill),
+                                 outline=rgba(outline), width=width)
 
     def text(self, xy, s: str, size=15, color=TEXT, bold=False, mono=False, anchor="la"):
         self.d.text(xy, s, font=_font(size, bold, mono), fill=color, anchor=anchor)
@@ -1136,7 +1147,7 @@ def render_video(out_path: str, width: int = 1280, height: int = 720, seconds_pe
 
 def _animate(img, name: str, t: float, index: int, canvas: "Canvas") -> None:
     """Subtle life: a moving cursor, and a fade for scene transitions."""
-    from PIL import ImageDraw
+    from PIL import Image, ImageDraw
 
     d = ImageDraw.Draw(img, "RGBA")
     # cursor glide

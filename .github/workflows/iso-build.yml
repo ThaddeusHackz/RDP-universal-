@@ -1,0 +1,74 @@
+name: THADD OS Desktop ISO
+
+# Builds the full Debian-live desktop ISO (hybrid BIOS + UEFI, XFCE skinned as a
+# Windows 11 / macOS Sequoia fusion, real browsers and tooling from apt) with
+# live-build, and attaches it to a Release.  This is the heavyweight sibling of
+# thadd-iso.yml, which builds the from-scratch THADD live ISO in pure Python.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "also create a Release with this build"
+        type: boolean
+        default: false
+  push:
+    branches: [main, "arena/**"]
+    paths:
+      - "iso/**"
+      - "cloud/**"
+      - "desktop/**"
+      - ".github/workflows/iso-build.yml"
+  tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  live-build:
+    name: Build & verify desktop ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: live-build toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq live-build debootstrap xorriso squashfs-tools \
+            mtools dosfstools rsync
+          lb --version
+
+      - name: Build THADD OS (desktop profile)
+        run: sudo --preserve-env=THADD_PROFILE,THADD_VERSION ./iso/build.sh
+
+      - name: List what we produced
+        run: |
+          ls -la dist/ || true
+          for f in dist/*.iso; do
+            echo "$f  $(stat -c%s "$f") bytes"
+            sha256sum "$f"
+          done
+
+      - name: Verify the ISO
+        run: |
+          if [ -x iso/verify.sh ]; then sudo ./iso/verify.sh; else echo "no verify.sh"; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: THADD-OS-desktop-ISO
+          path: dist/*.iso
+          retention-days: 30
+
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in v*) ;; *) TAG="v1.0.$(date -u +%Y%m%d%H%M)" ;; esac
+          NOTES="dist/README.txt"
+          [ -f "$NOTES" ] || printf 'THADD OS desktop live ISO (hybrid BIOS + UEFI).\n' > "$NOTES"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "THADD OS ${TAG#v}" --notes-file "$NOTES"
+          gh release upload "$TAG" dist/*.iso --clobber
+          gh release view "$TAG" --json assets --jq '.assets[].name'
