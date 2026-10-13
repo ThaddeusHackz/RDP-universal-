@@ -1,0 +1,100 @@
+name: THADD OS ISO
+
+# Builds the bootable UEFI ISO from source and (on a version tag, or when asked)
+# publishes it as a GitHub Release asset.  Pure Python + a C compiler:
+# no xorriso, no mtools, no live-build, no root.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "also create a Release with this build"
+        type: boolean
+        default: false
+  push:
+    branches: [main, "arena/**"]
+    paths:
+      - "thadd/**"
+      - ".github/workflows/thadd-iso.yml"
+  tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  iso:
+    name: Build THADD OS ISO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc binutils
+          sudo python3 -m pip install --break-system-packages -q pillow pycdlib
+          python3 -VV
+
+      - name: Fetch the kernel
+        run: |
+          mkdir -p build/payload
+          curl -fsSL -o build/payload/vmlinuz \
+            https://raw.githubusercontent.com/gokrazy/kernel.amd64/main/vmlinuz
+          ls -la build/payload/vmlinuz
+
+      - name: Build the UEFI loader
+        run: python3 thadd/boot/build_bootloaders.py
+
+      - name: Mock-firmware loader test
+        run: python3 thadd/boot/tests/run_loader_test.py
+
+      - name: Stage the live userland
+        run: python3 thadd/boot/stage_rootfs.py build/live/rootfs
+
+      - name: Pack the initramfs
+        run: |
+          python3 thadd/boot/mkinitramfs.py build/live/rootfs build/iso/boot/initrd.img.gz
+          ls -la build/iso/boot/
+
+      - name: Assemble the ISO
+        run: python3 -m thadd.boot.assemble_iso --no-initramfs
+
+      - name: Verify the disc
+        run: |
+          python3 - <<'PY'
+          import pycdlib, json, pathlib
+          m = json.loads(pathlib.Path("build/iso/manifest.json").read_text())
+          iso = pycdlib.PyCdlib()
+          iso.open(f"build/iso/{m['iso']}")
+          files = sorted(d.rstrip('/') + '/' + f for d, _, fl in iso.walk(rr_path='/') for f in fl)
+          print("files:", files)
+          for need in ("/boot/vmlinuz", "/boot/initrd.img", "/EFI/BOOT/efi.img"):
+              assert need in files, f"missing {need}"
+          cat = iso.eltorito_boot_catalog
+          assert cat.validation_entry.platform_id == 0xEF, "not an EFI El Torito entry"
+          assert cat.initial_entry.boot_media_type == 0, "boot image is not no-emulation"
+          print(f"El Torito OK: platform 0xEF, {cat.initial_entry.sector_count} sectors = "
+                f"{cat.initial_entry.sector_count*512/1e6:.1f} MB boot volume")
+          iso.close()
+          print(f"ISO {m['iso']}  {m['bytes']/1e6:.1f} MB  sha256 {m['sha256']}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: THADD-OS-ISO
+          path: |
+            build/iso/*.iso
+            build/iso/manifest.json
+            build/iso/*.sha256
+          retention-days: 30
+
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in v*) ;; *) TAG="v1.0.$(date -u +%Y%m%d%H%M)" ;; esac
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "THADD OS ${TAG#v}" --notes-file build/iso/README.TXT
+          gh release upload "$TAG" build/iso/*.iso build/iso/manifest.json build/iso/*.sha256 --clobber
+          gh release view "$TAG" --json assets --jq '.assets[].name'

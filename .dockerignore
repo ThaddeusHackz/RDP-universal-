@@ -1,0 +1,9 @@
+.git
+.gitignore
+.github
+node_modules
+*.log
+ci/*.png
+ci/screenshot-*.jpg
+!ci/thadd-os-screenshot.jpg
+.DS_Store

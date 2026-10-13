@@ -1,0 +1,100 @@
+name: THADD OS CI
+
+# =============================================================================
+#  THADD OS — full end-to-end verification suite.
+#  Builds the exact Docker image Railway will deploy, boots the whole OS,
+#  and then uses it the way a user would:
+#    1. HTTP portal + health checks
+#    2. WebSocket → live Xvnc desktop (the browser path)
+#    3. Raw RDP protocol negotiation (what mstsc sends first)
+#    4. Full RDP login with FreeRDP + screenshot of the running desktop
+#    5. Desktop session audit inside the container (XFCE, Plank, xrdp)
+#  The screenshot is committed back to the repo as photographic proof.
+# =============================================================================
+
+on:
+  push:
+    paths-ignore:
+      - "ci/**"
+      - "*.md"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-test:
+    name: Build & RDP-login test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build THADD OS image (identical to Railway's build)
+        run: docker build -t thadd-os .
+
+      - name: Boot THADD OS
+        run: |
+          docker run -d --name thadd \
+            -p 8080:8080 -p 3389:3389 \
+            -e PORT=8080 \
+            -e THADD_USER=thadd \
+            -e THADD_PASSWORD='ThaddTest123!' \
+            -e RESOLUTION=1280x800 \
+            -e SWAP_MB=0 \
+            thadd-os
+
+      - name: Wait until healthy
+        run: bash scripts/ci/wait-health.sh
+
+      - name: HTTP portal + WebSocket desktop tests
+        run: python3 scripts/ci/test_http.py
+
+      - name: Raw RDP protocol negotiation test
+        run: python3 scripts/ci/test_rdp.py
+
+      - name: Install an RDP client (FreeRDP) + X server + capture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq freerdp2-x11 xvfb imagemagick
+
+      - name: Full RDP login + desktop screenshot
+        env:
+          THADD_PASSWORD: ThaddTest123!
+        run: xvfb-run -a -s "-screen 0 1280x800x24" bash scripts/ci/rdp-login.sh
+
+      - name: Desktop session audit (inside the running OS)
+        run: |
+          docker exec thadd bash -lc '
+            set -e
+            pgrep -x xfce4-session >/dev/null && echo "✅ XFCE session running"
+            pgrep -x Xvnc         >/dev/null && echo "✅ Xvnc desktop renderer running"
+            pgrep -x xrdp         >/dev/null && echo "✅ xrdp RDP server running"
+            pgrep -x plank        >/dev/null && echo "✅ Plank dock running"
+            pgrep -x xfwm4        >/dev/null && echo "✅ xfwm4 window manager running"
+            pgrep -f websockify   >/dev/null && echo "✅ websockify bridge running"
+            thadd doctor
+          '
+
+      - name: Publish screenshot proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci/publish-screenshot.sh
+
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thadd-os-desktop
+          path: /tmp/thadd-ci/screenshot.jpg
+          if-no-files-found: ignore
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          echo "--- container logs ---"
+          docker logs thadd 2>&1 | tail -n 120 || true
+          echo "--- supervisor status ---"
+          docker exec thadd supervisorctl status 2>&1 || true
