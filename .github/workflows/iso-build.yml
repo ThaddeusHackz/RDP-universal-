@@ -39,7 +39,21 @@ jobs:
           lb --version
 
       - name: Build THADD OS (desktop profile)
+        id: build
+        continue-on-error: true
         run: sudo --preserve-env=THADD_PROFILE,THADD_VERSION ./iso/build.sh
+        # A failed desktop build must not stop the live ISO from being released
+        # (thadd-iso.yml is what publishes that one).  When this fails, the log
+        # tail below is the fastest way to see why in the Actions UI.
+
+      - name: Build log (on failure)
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::warning::the live-build desktop ISO failed - see below"
+          for f in dist/*.log dist/build.log iso/build.log /var/log/lb*.log; do
+            [ -f "$f" ] && { echo "===== $f (tail) ====="; tail -n 120 "$f"; }
+          done
+          ls -la dist/ || true
 
       - name: List what we produced
         run: |
@@ -54,13 +68,14 @@ jobs:
           if [ -x iso/verify.sh ]; then sudo ./iso/verify.sh; else echo "no verify.sh"; fi
 
       - uses: actions/upload-artifact@v4
+        if: hashFiles('dist/*.iso') != ''
         with:
           name: THADD-OS-desktop-ISO
           path: dist/*.iso
           retention-days: 30
 
       - name: Publish Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish) && hashFiles('dist/*.iso') != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
