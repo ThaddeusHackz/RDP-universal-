@@ -120,6 +120,9 @@ if [[ -d "$OVERLAY/opt/thadd/desktop/skel" ]]; then
 fi
 
 # Build fingerprint: the ISO and the OS can always prove what they were built from
+# (the directory has to exist before the redirect: with `set -e` a failed
+#  redirect used to end the build here, before live-build ever started)
+mkdir -p "$OVERLAY/etc/thadd"
 {
   echo "THADD_OS_VERSION=${VERSION}"
   echo "THADD_OS_CODENAME=${CODENAME}"
@@ -127,9 +130,6 @@ fi
   echo "THADD_OS_COMMIT=${GITHUB_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
   echo "THADD_OS_BUILT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OVERLAY/etc/thadd/build-info"
-mkdir -p "$OVERLAY/etc/thadd"
-mv "$OVERLAY/etc/thadd/build-info" "$OVERLAY/etc/thadd/build-info.tmp" 2>/dev/null || true
-mv "$OVERLAY/etc/thadd/build-info.tmp" "$OVERLAY/etc/thadd/build-info" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 2. Configure + build

@@ -118,7 +118,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          case "$TAG" in v*) ;; *) TAG="v1.0.$(date -u +%Y%m%d%H%M)" ;; esac
+          case "$TAG" in v*) ;; *) TAG="v1.0" ;; esac
           NOTES="dist/README.txt"
           [ -f "$NOTES" ] || printf 'THADD OS desktop live ISO (hybrid BIOS + UEFI).\n' > "$NOTES"
           gh release view "$TAG" >/dev/null 2>&1 || \
