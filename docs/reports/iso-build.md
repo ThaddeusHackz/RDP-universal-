@@ -1,7 +1,7 @@
 # THADD OS ISO build report
 
-- run: [38480052814](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38480052814)
-- commit: `32962e22d4a995c260997a7055abc37832080c6e`  (arena/6e1ad65e-rdp-universal)
+- run: [38482133183](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38482133183)
+- commit: `3a726014e3be606a058555a6f5f5aae9d8527903`  (arena/6e1ad65e-rdp-universal)
 - host: Python 3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]
 
 ## Sizes
@@ -14,7 +14,7 @@
 
 -- staged rootfs: biggest directories --
 148M	build/live/rootfs/usr
-4.4M	build/live/rootfs/opt
+4.5M	build/live/rootfs/opt
 232K	build/live/rootfs/etc
 20K	build/live/rootfs/var
 12K	build/live/rootfs/init
@@ -46,14 +46,14 @@
   "os": "THADD OS",
   "version": "1.0",
   "codename": "Nebula Prime",
-  "built": "2026-10-13T22:47:18Z",
+  "built": "2026-10-13T23:06:38Z",
   "iso": "THADD-OS-1.0-x86_64.iso",
-  "bytes": 77813760,
-  "sha256": "a2e4bb7f3721b7be024556046ce71af2c5ced087b58c622f158551fa67c51b1d",
+  "bytes": 77819904,
+  "sha256": "bc0ae2bfe310428e99c1ae412c3dec8e28345c99151375c635f23bb82a113a3b",
   "boot": "UEFI (El Torito, platform 0xEF, FAT16 efi.img)",
   "kernel_sha256": "f00a3601177b27462ebf23697f219acb8f995ffab2c930e1df30d335d5b9ab37",
-  "initramfs_sha256": "af4802ff58515365b601bb01f2fab068a079aece0db9b9594487c1c0bac91f39",
-  "initramfs_bytes": 58902293,
-  "loader_sha256": "e79fbe83b247db3ffae7f556d1fc5f93eac8f7b33334844da7487320a16dd4d3"
+  "initramfs_sha256": "3befc6ebdfebb80f9f29b98f82d549c27b46ad6ea327f68b1782d36ed3744e7f",
+  "initramfs_bytes": 58905105,
+  "loader_sha256": "ea17d46f2dab6646d73e9ce8dd6b1598535a280d0016166a8c0288d769f88e72"
 }
 ```
