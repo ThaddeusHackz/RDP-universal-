@@ -107,11 +107,8 @@ jobs:
             echo '```'
           } > docs/reports/iso-build.md
           cat docs/reports/iso-build.md
-          git config user.name "THADD CI"
-          git config user.email "ci@users.noreply.github.com"
-          git add docs/reports/iso-build.md
-          git diff --cached --quiet || git commit -m "ci: THADD OS ISO build report [skip ci]"
-          git push || true
+          bash scripts/ci/publish-file.sh docs/reports/iso-build.md \
+            "ci: THADD OS ISO build report [skip ci]"
 
       - uses: actions/upload-artifact@v4
         with:

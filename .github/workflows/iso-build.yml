@@ -92,11 +92,10 @@ jobs:
             echo '```'
           } > docs/reports/desktop-iso-build.md
           sed -n '1,40p' docs/reports/desktop-iso-build.md
-          git config user.name "THADD CI"
-          git config user.email "ci@users.noreply.github.com"
-          git add docs/reports/desktop-iso-build.md
-          git diff --cached --quiet || git commit -m "ci: desktop ISO build report [skip ci]"
-          git push || true
+          # the contents API, not a git push: a CI checkout races every other
+          # push and would silently drop the report
+          bash scripts/ci/publish-file.sh docs/reports/desktop-iso-build.md \
+            "ci: desktop ISO build report [skip ci]"
           echo "::warning::the live-build desktop ISO failed - see docs/reports/desktop-iso-build.md"
 
       - name: List what we produced
