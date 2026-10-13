@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq gcc binutils
-          sudo python3 -m pip install --break-system-packages -q pillow pycdlib
+          sudo python3 -m pip install --break-system-packages -q pillow pycdlib av imageio-ffmpeg
           python3 -VV
 
       - name: Compile every Python module
@@ -57,5 +57,8 @@ jobs:
           print(f"snapshots: {len(shots)}  video: {info['frames']} frames "
                 f"{info['seconds']}s via {info['mode']}")
           assert len(shots) >= 30, "the gallery lost scenes"
-          assert info["frames"] > 100, "the video is too short"
+          # the video must be a real encode (H.264), not the GIF fallback
+          assert info.get("mode") in ("pyav-h264", "ffmpeg-h264"), info
+          assert info.get("frames", 0) > 100, "the video is too short"
+          assert info.get("bytes", 0) > 50_000, "the video looks empty"
           PY
