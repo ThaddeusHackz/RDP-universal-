@@ -193,6 +193,38 @@ typedef struct {
   EFI_STATUS (*OpenVolume)(void *self, EFI_FILE_PROTOCOL **root);
 } EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 
+/* ------------------------------------------------------------ block devices
+   Used to read the disc directly as ISO 9660: firmware does not always mount a
+   CD's ISO 9660 volume as a filesystem, but every firmware can read its
+   blocks.  Layout follows the UEFI spec (2.10) exactly. */
+typedef UINT64 EFI_LBA;
+
+typedef struct {
+  UINT32  MediaId;
+  BOOLEAN RemovableMedia;
+  BOOLEAN MediaPresent;
+  BOOLEAN LogicalPartition;
+  BOOLEAN ReadOnly;
+  BOOLEAN WriteCached;
+  UINT32  BlockSize;
+  UINT32  IoAlign;
+  EFI_LBA LastBlock;
+  EFI_LBA LowestAlignedLba;
+  UINT32  LogicalBlocksPerPhysicalBlock;
+  UINT32  OptimalTransferLengthGranularity;
+} EFI_BLOCK_IO_MEDIA;
+
+typedef struct {
+  UINT64 Revision;
+  EFI_BLOCK_IO_MEDIA *Media;
+  EFI_STATUS (*Reset)(void *self, BOOLEAN extended_verification);
+  EFI_STATUS (*ReadBlocks)(void *self, UINT32 media_id, EFI_LBA lba,
+                           UINTN buffer_size, void *buffer);
+  EFI_STATUS (*WriteBlocks)(void *self, UINT32 media_id, EFI_LBA lba,
+                            UINTN buffer_size, void *buffer);
+  EFI_STATUS (*FlushBlocks)(void *self);
+} EFI_BLOCK_IO_PROTOCOL;
+
 #define EFI_FILE_MODE_READ   0x0000000000000001ULL
 #define EFI_FILE_MODE_WRITE  0x0000000000000002ULL
 #define EFI_FILE_MODE_CREATE 0x8000000000000000ULL
@@ -202,6 +234,9 @@ static EFI_GUID thadd_loaded_image_guid = {
 };
 static EFI_GUID thadd_sfsp_guid = {
   0x964E5B22, 0x6459, 0x11d2, { 0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B }
+};
+static EFI_GUID thadd_block_io_guid = {
+  0x964E5B21, 0x6459, 0x11d2, { 0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B }
 };
 
 #endif /* THADD_EFI_H */

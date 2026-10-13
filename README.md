@@ -111,11 +111,17 @@ The repository does not trust the ISOs — it proves them, on every push:
 
 | Check | Where |
 | --- | --- |
-| The loader runs against a **mock UEFI firmware** and every handover check passes (protocol 2.15, `boot_params` ramdisk fields, `rdinit=/init`) | `thadd/boot/tests/run_loader_test.py` |
+| The loader runs against **two mock firmwares** and every handover check passes (protocol 2.15, `boot_params` ramdisk fields, `rdinit=/init`): one with a filesystem, one that exposes **only raw blocks** — in which case the loader parses ISO 9660 itself and pulls the kernel and initramfs off the disc **byte-identically** | `thadd/boot/tests/run_loader_test.py` |
 | The staged userland **actually runs**: Python 3.11 in a chroot imports, Pillow renders text with DejaVu fonts | `thadd/boot/stage_rootfs.py` + `chroot` |
 | The THADD service **boots inside that guest userland** — `/healthz`, `system.info`, 105 methods registered | `python3 -m thadd.server` |
 | Every file extracted from the finished ISO is **hash-identical** to its source; the El Torito entry is spec-correct (platform `0xEF`, no-emulation, 4,152 sectors) | `thadd-iso.yml` → *Verify the disc* |
 | The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
+
+The kernel and initramfs are kept on the ISO 9660 volume rather than in the El Torito boot image,
+because that image's size is a 16-bit field in the boot catalog (32 MB ceiling). To make that safe on
+firmwares that do **not** mount a CD's ISO 9660 volume, the loader reads the disc's blocks directly
+with its own ISO 9660 parser — fallback order: any SimpleFileSystem volume first, then raw blocks.
+Firmware 2 above is that exact scenario, tested on a real ISO built by the same code as the shipped one.
 
 **Honest limits.** No hypervisor exists on the build host, so the final firmware handover has not
 been executed in a real VM — the loader prints its state on screen precisely so a failure is

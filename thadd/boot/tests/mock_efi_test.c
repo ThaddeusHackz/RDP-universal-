@@ -34,6 +34,7 @@ static EFI_SYSTEM_TABLE *g_entry_systab = NULL;
 static void          *g_entry_bp = NULL;
 static int            g_entry_calls = 0;
 static EFI_PHYSICAL_ADDRESS g_kernel_addr = 0;
+static int            g_page_allocs = 0;
 static UINTN          g_kernel_pages = 0;
 static EFI_PHYSICAL_ADDRESS g_initrd_addr = 0;
 
@@ -168,7 +169,10 @@ static EFI_STATUS bs_alloc_pages(UINTN type, UINTN mem_type, UINTN pages,
   }
   memset(got, 0, bytes);
   *memory = (EFI_PHYSICAL_ADDRESS)(uintptr_t)got;
-  if (type == AllocateAddress && g_kernel_addr == 0) { /* remember for checks */ }
+  /* the first allocation is the kernel, the second the initramfs */
+  if (g_page_allocs == 0) g_kernel_addr = *memory;
+  else if (g_page_allocs == 1) g_initrd_addr = *memory;
+  g_page_allocs++;
   return EFI_SUCCESS;
 }
 
@@ -187,6 +191,36 @@ static EFI_STATUS bs_alloc_pool(UINTN type, UINTN size, void **buffer)
 
 static EFI_STATUS bs_free_pool(void *buffer) { free(buffer); return EFI_SUCCESS; }
 
+/* ------------------------------------------------ block device (the real ISO)
+   In "iso" mode the mock offers the disc's raw blocks and, deliberately, NO
+   SimpleFileSystem at all - exactly the firmware the loader must survive:
+   one that can read sectors but does not mount ISO 9660. */
+static FILE *g_iso_fp = NULL;
+static EFI_BLOCK_IO_MEDIA g_blk_media;
+static int g_iso_mode = 0;
+static unsigned long g_block_reads = 0;
+
+static EFI_STATUS blk_reset(void *self, BOOLEAN ext) { (void)self; (void)ext; return EFI_SUCCESS; }
+static EFI_STATUS blk_flush(void *self) { (void)self; return EFI_SUCCESS; }
+
+static EFI_STATUS blk_read(void *self, UINT32 media_id, EFI_LBA lba, UINTN size, void *buf)
+{
+  (void)self; (void)media_id;
+  if (!g_iso_fp) return EFI_DEVICE_ERROR;
+  if (size % g_blk_media.BlockSize) return EFI_BAD_BUFFER_SIZE;
+  if (lba + size / g_blk_media.BlockSize > g_blk_media.LastBlock + 1)
+    return EFI_INVALID_PARAMETER;
+  if (fseeko(g_iso_fp, (off_t)(lba * g_blk_media.BlockSize), SEEK_SET) != 0)
+    return EFI_DEVICE_ERROR;
+  if (fread(buf, 1, size, g_iso_fp) != size) return EFI_DEVICE_ERROR;
+  g_block_reads++;
+  return EFI_SUCCESS;
+}
+
+static EFI_BLOCK_IO_PROTOCOL g_blkio = {
+  0x00010000, &g_blk_media, blk_reset, blk_read, NULL, blk_flush
+};
+
 static EFI_STATUS bs_handle_protocol(EFI_HANDLE h, EFI_GUID *guid, void **iface)
 {
   if (memcmp(guid, &thadd_loaded_image_guid, sizeof(*guid)) == 0) {
@@ -197,7 +231,13 @@ static EFI_STATUS bs_handle_protocol(EFI_HANDLE h, EFI_GUID *guid, void **iface)
     *iface = &li;
     return EFI_SUCCESS;
   }
+  if (memcmp(guid, &thadd_block_io_guid, sizeof(*guid)) == 0) {
+    if (!g_iso_mode || h != (EFI_HANDLE)(uintptr_t)0xB10C) return EFI_NOT_FOUND;
+    *iface = &g_blkio;
+    return EFI_SUCCESS;
+  }
   if (memcmp(guid, &thadd_sfsp_guid, sizeof(*guid)) == 0) {
+    if (g_iso_mode) return EFI_NOT_FOUND;      /* a firmware with no ISO driver */
     /* Deliberately refuse the volume the firmware says we were loaded from:
        that forces the loader down its "scan every volume" path, which is what
        the real ISO needs (kernel + initramfs live on the ISO 9660 volume). */
@@ -219,7 +259,18 @@ static EFI_STATUS bs_locate_handle_buffer(UINTN search_type, EFI_GUID *protocol,
 {
   (void)key;
   if (search_type != EFI_LOCATE_BY_PROTOCOL) return EFI_UNSUPPORTED;
+  if (memcmp(protocol, &thadd_block_io_guid, sizeof(*protocol)) == 0) {
+    if (!g_iso_mode) return EFI_NOT_FOUND;
+    EFI_HANDLE *out = NULL;
+    if (EFI_ERROR(bs_alloc_pool(2, sizeof(EFI_HANDLE), (void **)&out)))
+      return EFI_OUT_OF_RESOURCES;
+    out[0] = (EFI_HANDLE)(uintptr_t)0xB10C;
+    *no_handles = 1;
+    *buffer = out;
+    return EFI_SUCCESS;
+  }
   if (memcmp(protocol, &thadd_sfsp_guid, sizeof(*protocol)) != 0) return EFI_NOT_FOUND;
+  if (g_iso_mode) return EFI_NOT_FOUND;        /* not even one volume to scan */
   EFI_HANDLE *out = NULL;
   if (EFI_ERROR(bs_alloc_pool(2 /* EfiLoaderData */, sizeof(EFI_HANDLE), (void **)&out)))
     return EFI_OUT_OF_RESOURCES;
@@ -266,11 +317,73 @@ static void build_kernel_blob(const char *real_kernel)
   g_kernel_len = 0x1000;
 }
 
+/* "dump <kernel-out> <initrd-out>": write the fake kernel/initramfs this test
+   uses, so the driver can put them on a real ISO and make the loader read them
+   back off the disc's blocks. */
+static int dump_blobs(const char *real_kernel, const char *kout, const char *iout)
+{
+  g_kernel_blob = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  g_initrd_blob = mmap(NULL, 0x4000, PROT_READ | PROT_WRITE | PROT_EXEC,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (g_kernel_blob == MAP_FAILED || g_initrd_blob == MAP_FAILED) return 2;
+  build_kernel_blob(real_kernel);
+  g_initrd_len = 0x3000;
+  for (size_t i = 0; i < g_initrd_len; i++) g_initrd_blob[i] = (unsigned char)(i * 7);
+  FILE *f = fopen(kout, "wb");
+  if (!f) { fprintf(stderr, "cannot write %s\n", kout); return 2; }
+  fwrite(g_kernel_blob, 1, g_kernel_len, f);
+  fclose(f);
+  f = fopen(iout, "wb");
+  if (!f) { fprintf(stderr, "cannot write %s\n", iout); return 2; }
+  fwrite(g_initrd_blob, 1, g_initrd_len, f);
+  fclose(f);
+  printf("dumped %s (%zu bytes) and %s (%zu bytes)\n", kout, g_kernel_len, iout, g_initrd_len);
+  return 0;
+}
+
+static int check_bytes_are(const char *what, const void *addr, const char *path, size_t n)
+{
+  FILE *f = fopen(path, "rb");
+  if (!f) { printf("  [FAIL] cannot open %s for comparison\n", path); return 1; }
+  unsigned char *want = malloc(n);
+  size_t got = fread(want, 1, n, f);
+  fclose(f);
+  if (got != n) { free(want); printf("  [FAIL] %s is %zu bytes, expected %zu\n", path, got, n); return 1; }
+  int bad = memcmp(addr, want, n) != 0;
+  free(want);
+  printf("  [%s] %s: %zu bytes in memory match %s\n", bad ? "FAIL" : "ok", what, n, path);
+  return bad;
+}
+
 int main(int argc, char **argv)
 {
   const char *real_kernel = argc > 1 ? argv[1] : "build/payload/vmlinuz";
+  const char *mode = argc > 2 ? argv[2] : "fat";
   EFI_SYSTEM_TABLE st;
   EFI_HANDLE handle = (EFI_HANDLE)(uintptr_t)0xABCDEF;
+
+  if (strcmp(mode, "dump") == 0) {
+    if (argc < 5) { fprintf(stderr, "usage: %s <kernel> dump <kout> <iout>\n", argv[0]); return 2; }
+    return dump_blobs(real_kernel, argv[3], argv[4]);
+  }
+
+  if (strcmp(mode, "iso") == 0) {
+    if (argc < 4) { fprintf(stderr, "usage: %s <kernel> iso <iso-image> [expect-k] [expect-i]\n", argv[0]); return 2; }
+    g_iso_fp = fopen(argv[3], "rb");
+    if (!g_iso_fp) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }
+    fseeko(g_iso_fp, 0, SEEK_END);
+    off_t iso_size = ftello(g_iso_fp);
+    g_blk_media.MediaId = 0x7A11;
+    g_blk_media.MediaPresent = 1;
+    g_blk_media.RemovableMedia = 1;
+    g_blk_media.BlockSize = 2048;
+    g_blk_media.IoAlign = 4;
+    g_blk_media.LastBlock = (EFI_LBA)(iso_size / 2048) - 1;
+    g_iso_mode = 1;
+    printf("=== mock firmware: %s (%lld bytes, %llu blocks), NO filesystem exposed ===\n",
+           argv[3], (long long)iso_size, (unsigned long long)(iso_size / 2048));
+  }
 
   g_kernel_blob = mmap(NULL, 0x2000, PROT_READ | PROT_WRITE | PROT_EXEC,
                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -321,6 +434,20 @@ int main(int argc, char **argv)
           "cmdline contains rdinit=/init");
     CHECK(ri != 0 && rs == g_initrd_len, "boot_params ramdisk_image/size match the initramfs");
     printf("       cmdline   = %s\n", cl ? (char *)(uintptr_t)cl : "(null)");
+  }
+  if (g_iso_mode) {
+    CHECK(g_block_reads > 0, "the disc was read through the block device");
+    CHECK(g_kernel_blob != NULL && g_kernel_addr != 0,
+          "the kernel was placed in memory from the ISO");
+    if (argc > 4 && g_kernel_addr)
+      failures += check_bytes_are("kernel read off the ISO is byte-identical",
+                                  (const void *)(uintptr_t)g_kernel_addr, argv[4],
+                                  g_kernel_len);
+    if (argc > 5 && g_initrd_addr)
+      failures += check_bytes_are("initramfs read off the ISO is byte-identical",
+                                  (const void *)(uintptr_t)g_initrd_addr, argv[5],
+                                  g_initrd_len);
+    printf("       block reads: %lu\n", g_block_reads);
   }
   CHECK(1, "loader ran to completion");
   printf("=== %s ===\n", failures ? "FAILURES" : "all loader checks passed");
