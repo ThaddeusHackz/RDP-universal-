@@ -18,6 +18,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# The build host is not always this Debian 12 box: derive the interpreter's
+# version instead of hardcoding 3.11, so CI (Ubuntu 24.04, python 3.12) works too.
+PY_VER = f"{sys.version_info.major}.{sys.version_info.minor}"
+PY_BIN = f"python{PY_VER}"
+PY_STDLIB = Path(f"/usr/lib/{PY_BIN}")
+PY_SITE_DIRS = tuple(str(p) for p in (
+    Path(f"/usr/local/lib/{PY_BIN}/dist-packages"),
+    Path(f"/usr/local/lib/{PY_BIN}/site-packages"),
+    Path(f"/usr/lib/{PY_BIN}/dist-packages"),
+    Path(f"/usr/lib/python3/dist-packages"),
+    Path(f"~/.local/lib/{PY_BIN}/site-packages").expanduser(),
+))
+
 # --------------------------------------------------------------------------- #
 # what goes in
 
@@ -33,7 +46,7 @@ mount umount findmnt lsblk blkid lscpu lsmem lsusb lspci dmesg hexdump od
 ip ss ping ping4 traceroute nc netstat arp route
 sha256sum sha512sum md5sum b2sum cksum dd truncate mktemp install diff cmp patch
 strings objdump readelf nm size addr2line xxd base64 base32 openssl
-curl wget python3 python3.11 git nano vi vim ed joe
+curl wget python3 git nano vi vim ed joe
 clear reset tput stty setterm kbdcontrol
 sudo su login passwd useradd groupadd hostnamectl timedatectl localectl mountpoint
 sync agetty setsid logger wall on_ac_power fbset
@@ -219,31 +232,34 @@ class Stager:
                 self.copy(Path(os.path.realpath(p)))
 
         # 3. Python
-        for py in ("/usr/bin/python3.11", "/usr/bin/python3"):
+        for py in (f"/usr/bin/{PY_BIN}", "/usr/bin/python3"):
             if Path(py).exists():
                 self.copy(Path(os.path.realpath(p)))
         for lib in Path("/usr/lib/x86_64-linux-gnu").glob("libpython3*.so*"):
             self.copy(Path(os.path.realpath(lib)))
         # /usr/bin/python3 is only a symlink on the host - the guest needs it too
-        self.symlink("usr/bin/python3", "python3.11")
-        self.symlink("usr/bin/python", "python3.11")
-        if Path("/usr/lib/python3.11").is_dir():
-            self.copy_tree(Path("/usr/lib/python3.11"), drop=PY_DROP_DIRS)
+        self.symlink("usr/bin/python3", PY_BIN)
+        self.symlink("usr/bin/python", PY_BIN)
+        if PY_STDLIB.is_dir():
+            self.copy_tree(PY_STDLIB, drop=PY_DROP_DIRS)
 
         # 4. installed Python packages we actually use (PIL, and its libs) -
         #    only what the desktop/renderer imports, never the whole site tree.
+        site_rel = f"usr/local/lib/{PY_BIN}/dist-packages"
         for pkg in DIST_PACKAGES:
-            for base in ("/usr/local/lib/python3.11/dist-packages",
-                         "/usr/lib/python3/dist-packages"):
+            for base in PY_SITE_DIRS:
                 src = Path(base) / pkg
                 if src.is_dir():
-                    self.copy_tree(src, dest_rel=f"usr/local/lib/python3.11/dist-packages/{pkg}")
+                    self.copy_tree(src, dest_rel=f"{site_rel}/{pkg}")
+                    break
             # Pillow's bundled native libs ("pillow.libs" on recent wheels)
-            for libdir in Path("/usr/local/lib/python3.11/dist-packages").glob(PIL_LIBS_GLOB):
-                self.copy_tree(libdir, dest_rel=f"usr/local/lib/python3.11/dist-packages/{libdir.name}")
-        for so in Path("/usr/local/lib/python3.11/dist-packages").glob("PIL/*.so"):
-            for dep in ldd_deps(so):
-                self.copy_dep(dep)
+            for base in PY_SITE_DIRS:
+                for libdir in Path(base).glob(PIL_LIBS_GLOB):
+                    self.copy_tree(libdir, dest_rel=f"{site_rel}/{libdir.name}")
+        for base in PY_SITE_DIRS:
+            for so in Path(base).glob("PIL/*.so"):
+                for dep in ldd_deps(so):
+                    self.copy_dep(dep)
         # 5. fonts for the desktop compositor
         fonts = Path("/usr/share/fonts/truetype/dejavu")
         if fonts.is_dir():
