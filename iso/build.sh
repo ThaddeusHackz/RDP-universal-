@@ -144,6 +144,36 @@ log "lb config"
 rm -rf config/binary config/chroot config/bootstrap config/common 2>/dev/null || true
 lb config
 
+# ---------------------------------------------------------------------------
+# 1b. Trust nothing: print the configuration live-build actually kept, and pin
+#     the values that decide whether this is a bookworm image (a wrong suite or
+#     an obsolete security mirror is what turns a build into 404s at the very
+#     end, after an hour of work).
+# ---------------------------------------------------------------------------
+if [[ -f config/common ]]; then
+  log "effective live-build configuration"
+  grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|DEBOOTSTRAP|BOOTLOADERS|INITSYSTEM)=' config/common \
+    | sed 's/^/    /' || true
+
+  force() { # force <VAR> <value>
+    if grep -q "^$1=" config/common; then
+      sed -i "s|^$1=.*|$1=\"$2\"|" config/common
+    else
+      echo "$1=\"$2\"" >> config/common
+    fi
+  }
+  force LB_DISTRIBUTION "bookworm"
+  force LB_PARENT_DISTRIBUTION "bookworm"
+  force LB_MIRROR_CHROOT "http://deb.debian.org/debian/"
+  force LB_MIRROR_CHROOT_SECURITY "http://security.debian.org/debian-security/"
+  force LB_MIRROR_BINARY "http://deb.debian.org/debian/"
+  force LB_MIRROR_BINARY_SECURITY "http://security.debian.org/debian-security/"
+  echo "  LB_MIRROR_CHROOT_SECURITY=\"http://security.debian.org/debian-security/\"" > /dev/null
+  ok "suite + mirrors pinned to bookworm (they are printed above, before the fix-up)"
+else
+  warn "no config/common after lb config - live-build printed its own diagnostics above"
+fi
+
 log "lb build  (this is the long one — 15-45 min depending on cores/disk)"
 : > "$DIST_DIR/build.log"
 if ! lb build 2>&1 | tee -a "$DIST_DIR/build.log"; then

@@ -74,9 +74,21 @@ jobs:
             ls -la dist/ 2>/dev/null || true
             echo "== ls iso =="
             ls -la iso/ 2>/dev/null | head -20
+            echo
+            echo "== effective live-build config (iso/config/common) =="
+            grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|BOOTLOADERS|INITSYSTEM|DEBOOTSTRAP)=' iso/config/common 2>/dev/null || echo "(no config/common)"
             for f in dist/build.log dist/desktop-build-trace.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
-              [ -f "$f" ] && { echo; echo "===== $f (last 150 lines) ====="; tail -n 150 "$f"; }
+              [ -f "$f" ] || continue
+              echo
+              echo "===== $f (first 40 lines) ====="
+              head -n 40 "$f"
+              echo
+              echo "===== $f (last 120 lines) ====="
+              tail -n 120 "$f"
             done
+            echo
+            echo "===== suites and mirrors the build actually contacted ====="
+            grep -hoE '(https?://[^ ]+ (bookworm|bullseye|trixie|sid|stable|testing)[^ ]*)' dist/build.log 2>/dev/null | sort -u | head -12 || true
             echo '```'
           } > docs/reports/desktop-iso-build.md
           sed -n '1,40p' docs/reports/desktop-iso-build.md
