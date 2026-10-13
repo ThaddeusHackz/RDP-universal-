@@ -62,6 +62,15 @@ WALLET_PATHS = [
 ]
 
 ACQUISITION_HINTS = {
+    "generic": ["image the whole device first (write-blocked), verify the copy by hash",
+                "record size, geometry and partition offsets before touching anything",
+                "carve unallocated space for deleted content",
+                "check file slack and volume shadow copies / snapshots",
+                "timestamp every artefact and keep the chain of custody"],
+    "Firmware": ["EFI System Partition contents (/EFI/BOOT, /EFI/Microsoft, /EFI/Apple)",
+                 "UEFI variables and boot order (NVRAM)",
+                 "Secure Boot keys and signatures (db/dbx/KEK/PK)",
+                 "firmware update capsules and rollback state"],
     "Windows": ["NTFS $MFT", "registry hives (SAM/SYSTEM/SOFTWARE/SECURITY)", "Prefetch", "Amcache",
                 "$UsnJrnl (USN change journal)", "LNK files", "Jump Lists", "Event Logs (.evtx)",
                 "SRUM database", "BitLocker metadata"],
@@ -162,6 +171,12 @@ def analyze(path: str, deep: bool = True, extract_dir: str = "", progress=None) 
         families = {o["family"] for o in report["os_detected"]}
         for fam in families:
             report["acquisition_plan"].extend(ACQUISITION_HINTS.get(fam, []))
+        # Every target gets a plan - a disk with an unrecognised or empty
+        # filesystem still has to be acquired, verified and carved.
+        if report["filesystems"] or report["partitions"]:
+            for hint in ACQUISITION_HINTS["generic"]:
+                if hint not in report["acquisition_plan"]:
+                    report["acquisition_plan"].append(hint)
 
         if deep:
             step("hunting indicators")

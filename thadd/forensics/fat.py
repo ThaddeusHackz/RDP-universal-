@@ -61,8 +61,14 @@ class FAT:
         else:
             self.fstype = "FAT32"
             self.fat_bits = 32
-        self.data_start = self.offset + (self.reserved_sectors + self.num_fats * self.fat_size) * self.bytes_per_sector
+        # On FAT12/16 the fixed root directory sits between the FATs and the
+        # data area, so cluster 2 starts *after* it.  Forgetting that offset
+        # makes every file read come out of the root directory instead of the
+        # file's own clusters (found by the regression tests in tests/).
+        self.root_dir_sectors = (self.root_entries * 32 + self.bytes_per_sector - 1) // self.bytes_per_sector \
+            if self.fat_bits != 32 else 0
         self.root_dir_offset = self.offset + (self.reserved_sectors + self.num_fats * self.fat_size) * self.bytes_per_sector
+        self.data_start = self.root_dir_offset + self.root_dir_sectors * self.bytes_per_sector
         self.fat_offset = self.offset + self.reserved_sectors * self.bytes_per_sector
         self.volume_label = ""
         self.volume_id = struct.unpack_from("<I", boot, 0x27)[0] if len(boot) > 0x2B else 0

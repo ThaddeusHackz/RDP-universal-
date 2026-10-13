@@ -116,6 +116,8 @@ The repository does not trust the ISOs — it proves them, on every push:
 | The THADD service **boots inside that guest userland** — `/healthz`, `system.info`, 105 methods registered | `python3 -m thadd.server` |
 | Every file extracted from the finished ISO is **hash-identical** to its source; the El Torito entry is spec-correct (platform `0xEF`, no-emulation, 4,152 sectors) | `thadd-iso.yml` → *Verify the disc* |
 | The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
+| The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
+| The gallery and the demo video still render on a clean machine | `thadd-tests.yml` |
 
 The kernel and initramfs are kept on the ISO 9660 volume rather than in the El Torito boot image,
 because that image's size is a 16-bit field in the boot catalog (32 MB ceiling). To make that safe on
@@ -170,6 +172,8 @@ tools/            helper scripts, test suites, welcome screens
 scripts/ci/       CI helpers (wait-health, RDP login, screenshot publishing)
 docs/snapshots/   the 31 desktop snapshots above
 docs/media/       the demo video
+FORENSIC_SCAN.md  the forensic method, the CLI, the readers and the tests
+                  (method reference: morluto/rea)
 ```
 
 ## License & credits
