@@ -78,6 +78,41 @@ jobs:
           print(f"ISO {m['iso']}  {m['bytes']/1e6:.1f} MB  sha256 {m['sha256']}")
           PY
 
+      - name: Build report (what went in, and how big)
+        run: |
+          mkdir -p docs/reports
+          {
+            echo "# THADD OS ISO build report"
+            echo
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- commit: \`${{ github.sha }}\`  (${{ github.ref_name }})"
+            echo "- host: $(python3 -VV | head -1)"
+            echo
+            echo "## Sizes"
+            echo
+            echo '```'
+            du -sh build/live/rootfs build/iso/boot/initrd.img.gz build/iso/*.iso build/payload/vmlinuz 2>/dev/null
+            echo
+            echo "-- staged rootfs: biggest directories --"
+            du -sh build/live/rootfs/* build/live/rootfs/usr/* 2>/dev/null | sort -hr | head -12
+            echo
+            echo "-- biggest files in the userland --"
+            find build/live/rootfs -type f -size +3M -printf '%s %p\n' | sort -rn | head -12
+            echo '```'
+            echo
+            echo "## Manifest"
+            echo
+            echo '```json'
+            cat build/iso/manifest.json
+            echo '```'
+          } > docs/reports/iso-build.md
+          cat docs/reports/iso-build.md
+          git config user.name "THADD CI"
+          git config user.email "ci@users.noreply.github.com"
+          git add docs/reports/iso-build.md
+          git diff --cached --quiet || git commit -m "ci: THADD OS ISO build report [skip ci]"
+          git push || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: THADD-OS-ISO
