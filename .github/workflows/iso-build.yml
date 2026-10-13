@@ -46,19 +46,45 @@ jobs:
         # (thadd-iso.yml is what publishes that one).  When this fails, the log
         # tail below is the fastest way to see why in the Actions UI.
 
-      - name: Build log (on failure)
+      - name: Build log (on failure) - committed so it is readable from anywhere
         if: steps.build.outcome == 'failure'
         run: |
-          echo "::warning::the live-build desktop ISO failed - see below"
-          for f in dist/*.log dist/build.log iso/build.log /var/log/lb*.log; do
-            [ -f "$f" ] && { echo "===== $f (tail) ====="; tail -n 120 "$f"; }
-          done
-          ls -la dist/ || true
+          mkdir -p docs/reports
+          {
+            echo "# THADD OS desktop ISO - live-build report"
+            echo
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- result: **failed**"
+            echo
+            echo '```'
+            echo "== ls dist =="
+            ls -la dist/ 2>/dev/null || true
+            echo "== ls iso =="
+            ls -la iso/ 2>/dev/null | head -20
+            for f in dist/build.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
+              [ -f "$f" ] && { echo; echo "===== $f (last 150 lines) ====="; tail -n 150 "$f"; }
+            done
+            echo '```'
+          } > docs/reports/desktop-iso-build.md
+          sed -n '1,40p' docs/reports/desktop-iso-build.md
+          git config user.name "THADD CI"
+          git config user.email "ci@users.noreply.github.com"
+          git add docs/reports/desktop-iso-build.md
+          git diff --cached --quiet || git commit -m "ci: desktop ISO build report [skip ci]"
+          git push || true
+          echo "::warning::the live-build desktop ISO failed - see docs/reports/desktop-iso-build.md"
 
       - name: List what we produced
         run: |
           ls -la dist/ || true
-          for f in dist/*.iso; do
+          shopt -s nullglob
+          isos=(dist/*.iso)
+          if (( ${#isos[@]} == 0 )); then
+            echo "::warning::live-build produced no ISO in this run"
+            exit 0
+          fi
+          for f in "${isos[@]}"; do
             echo "$f  $(stat -c%s "$f") bytes"
             sha256sum "$f"
           done
