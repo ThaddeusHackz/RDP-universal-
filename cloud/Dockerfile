@@ -1,4 +1,16 @@
 # =============================================================================
+#  THADD OS — root Dockerfile
+# =============================================================================
+#  The cloud edition of THADD OS lives in cloud/ (Dockerfile, entrypoint, skel,
+#  web, config). This root file exists so a plain `docker build .` — including
+#  the repository's long-standing CI workflow — keeps building the SAME image
+#  without anyone having to know the internal layout.
+#
+#      docker build -t thadd-os .          # identical to: docker build -t thadd-os cloud/
+#
+#  For the bootable ISO (the real OS), see iso/build.sh.
+# =============================================================================
+# =============================================================================
 #  THADD OS — "One OS. All the Best."
 #  A universal Linux desktop that lives in the cloud.
 #
@@ -129,7 +141,9 @@ RUN chmod +x /etc/xrdp/startwm.sh /opt/thadd/session.sh /opt/thadd/welcome.sh \
              /opt/thadd/harden-rdp.sh /opt/thadd/login-probe.sh \
              /opt/thadd/startwm.sh /usr/local/bin/thadd
 
-COPY desktop/              /opt/thadd/web/
+# The Nebula Prime shell is the portal; the v1 portal stays available at /v1/
+COPY desktop/                    /opt/thadd/web/
+COPY cloud/web/                  /opt/thadd/web/v1/
 COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/
 
 # ---------------------------------------------------------------------------

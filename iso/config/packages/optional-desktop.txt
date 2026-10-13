@@ -1,0 +1,67 @@
+# THADD OS — optional desktop polish. Anything missing is skipped silently.
+# Installer: thadd-apt-safe (see iso/config/hooks/normal/0000-thadd-apt-safe)
+# ---------------------------------------------------------------------------
+kitty                      # GPU-accelerated terminal (kitty/fastfetch pairing)
+alacritty                  # second modern terminal, rust-based
+zsh
+fish
+starship                   # cross-shell prompt (config shipped in skel)
+fastfetch                  # neofetch successor, faster and prettier
+btop
+duf
+ncdu
+ranger
+mc
+bat
+fd-find
+ripgrep
+fzf
+silversearcher-ag
+delta                      # pretty git diffs
+gh                         # GitHub CLI
+lazygit
+git-extras
+neovim
+micro
+shellcheck
+shfmt
+stow
+tmux
+htop
+glances
+conky-all
+variety
+nitrogen
+feh
+compton
+picom
+redshift
+light
+xbacklight
+numlockx
+xcape
+sxhkd
+autorandr
+copyq
+ulauncher
+xfce4-docklike-plugin
+xfce4-cpugraph-plugin
+xfce4-netload-plugin
+xfce4-systemload-plugin
+xfce4-diskperf-plugin
+xfce4-weather-plugin
+xfce4-notes-plugin
+xfce4-genmon-plugin
+xfce4-sensors-plugin
+xfce4-battery-plugin
+xfce4-clipman
+xfce4-mailwatch-plugin
+xfce4-timer-plugin
+xfce4-cpufreq-plugin
+obs-studio
+audacity
+inkscape
+krita
+blender
+gimp
+libreoffice

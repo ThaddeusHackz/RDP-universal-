@@ -22,6 +22,7 @@ import * as guide from "./guide.js";
 import * as misc from "./misc.js";
 import * as dev from "./dev.js";
 import * as system from "./system.js";
+import { native } from "../native.js";
 
 /* id -> [builder, width, height] */
 const B = {};
@@ -52,6 +53,11 @@ export function appOpen(id) { return windows.has(id) || [...windows.values()].so
 
 export function launch(id, args = {}) {
   if (id === "launchpad") { import("../shell.js").then((m) => m.openLaunchpad()); return null; }
+  /* Native launchers (live ISO / dev preview): a real fork+exec, no window. */
+  if (typeof id === "string" && id.startsWith("host:")) {
+    import("../native.js").then((m) => m.open(id.slice(5))).catch((e) => console.warn(e));
+    return null;
+  }
   const spec = B[id];
   const meta = BY_ID[id] || { id, name: id, icon: "▢", desc: "Application", cls: "" };
   if (spec && !spec.b) { import("../shell.js").then((m) => m.openLaunchpad()); return null; }
@@ -100,7 +106,7 @@ export async function runInTerminal(cmd, silent = false) {
 
 /* The global bridge: apps can launch other apps without circular imports. */
 window.THADD = Object.assign(window.THADD || {}, {
-  launch, closeApp, runningApps, appOpen, runInTerminal,
+  launch, closeApp, runningApps, appOpen, runInTerminal, native,
   version: "2.0.0",
   codename: "Nebula Prime",
   notify: toast,

@@ -9,3 +9,8 @@ node_modules/
 # python
 __pycache__/
 *.pyc
+
+# test harness
+tools/tests/node_modules/
+tools/tests/bundle.js
+tools/tests/package-lock.json

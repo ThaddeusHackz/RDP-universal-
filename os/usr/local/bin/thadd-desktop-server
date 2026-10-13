@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+# =============================================================================
+#  THADD OS · thadd-desktop-server
+# -----------------------------------------------------------------------------
+#  Serves the THADD Shell over http://127.0.0.1:8787 so the live ISO gets a real
+#  browser origin (proper localStorage, CSP, WebSocket-free SSE to Groq) instead
+#  of the file:// shadow-realm. Two jobs:
+#
+#    1. GET  /*          → static files from /opt/thadd/desktop (the shell)
+#    2. POST /bridge/*   → let the shell launch NATIVE applications
+#
+#  The bridge is what turns the shell from a simulation into a desktop: on the
+#  live ISO the dock's Terminal button can open a real xfce4-terminal, Files can
+#  open Thunar, and so on. It is deliberately tiny and paranoid:
+#     · binds 127.0.0.1 only (never 0.0.0.0) and runs as the live user
+#     · rejects any request whose Origin/Host is not the local shell
+#     · executes ONLY names from a hard-coded allow-list, never a free shell
+# =============================================================================
+import json
+import os
+import posixpath
+import subprocess
+import sys
+import urllib.parse
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+ROOT = os.environ.get("THADD_SHELL_ROOT", "/opt/thadd/desktop")
+PORT = int(os.environ.get("THADD_SHELL_PORT", "8787"))
+BIND = os.environ.get("THADD_SHELL_BIND", "127.0.0.1")
+LOG = os.environ.get("THADD_SHELL_LOG", "/var/log/thadd/shell-server.log")
+# A live ISO binds loopback only. A developer may serve the shell to a browser
+# with THADD_DEV=1 (preview the desktop without building an image); that mode
+# disables the origin check, so it must be asked for explicitly.
+DEV = os.environ.get("THADD_DEV") == "1"
+ALLOWED_HOSTS = {"127.0.0.1", "localhost", "thadd-os"}
+
+# Native applications the shell may start. Value = argv (never a shell string).
+BRIDGE = {
+    "terminal": ["xfce4-terminal", "--maximize", "--title=THADD Shell · Native"],
+    "files": ["thunar"],
+    "browser": ["firefox-esr"],
+    "chromium": ["chromium"],
+    "editor": ["mousepad"],
+    "monitor": ["xfce4-taskmanager"],
+    "settings": ["xfce4-settings-manager"],
+    "screenshot": ["xfce4-screenshooter", "-f", "-s", "/home/thadd/Pictures"],
+    "power": ["xfce4-session-logout"],
+    "wireshark": ["wireshark"],
+    "burp": ["burpsuite"],
+    "msfconsole": ["xfce4-terminal", "--maximize", "--title=Metasploit", "-e",
+                   "bash -lc 'msfconsole || sudo msfconsole'"],
+    "doctor": ["xfce4-terminal", "--maximize", "--title=THADD Doctor", "-e",
+               "bash -lc 'thadd doctor; echo; read -n1 -p \"press a key to close\"'"],
+    "iso": ["xfce4-terminal", "--maximize", "--title=THADD ISO build", "-e",
+            "bash -lc 'sudo /opt/thadd/tools/iso-live-build.sh; read -n1 -p \"press a key to close\"'"],
+    "jarvis": ["xfce4-terminal", "--maximize", "--title=JARVIS CLI", "-e",
+               "bash -lc 'thadd ai -i; read -n1 -p \"press a key to close\"'"],
+    "xfce": ["__leave_kiosk__"],
+}
+
+
+def installed():
+    """Which bridged applications actually exist on this image?"""
+    path = os.environ.get("PATH", "/usr/bin:/bin")
+    out = []
+    for name, argv in BRIDGE.items():
+        exe = argv[0]
+        if exe == "__leave_kiosk__":
+            # "leave the shell" only makes sense on a machine that has XFCE
+            if not DEV and os.path.isdir("/usr/share/xsessions"):
+                out.append(name)
+            continue
+        if any(os.access(os.path.join(d, exe), os.X_OK) for d in path.split(":")):
+            out.append(name)
+    return sorted(out)
+
+
+def log(msg):
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a", encoding="utf-8") as fh:
+            fh.write(msg + "\n")
+    except OSError:
+        pass
+
+
+class Handler(SimpleHTTPRequestHandler):
+    server_version = "thadd-desktop/2.0"
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=ROOT, **kw)
+
+    # -- helpers ------------------------------------------------------------
+    def _local_only(self):
+        if DEV and BIND not in ("127.0.0.1", "localhost"):
+            return True
+        host = (self.headers.get("Host") or "").split(":")[0]
+        origin = self.headers.get("Origin") or ""
+        if host and host not in ALLOWED_HOSTS:
+            return False
+        if origin:
+            try:
+                if urllib.parse.urlparse(origin).hostname not in ALLOWED_HOSTS:
+                    return False
+            except ValueError:
+                return False
+        return True
+
+    def _json(self, code, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def end_headers(self):
+        # the shell is a single-page app: never let a stale cache pin an old build
+        if not self.path.startswith("/bridge"):
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.send_header("X-Content-Type-Options", "nosniff")
+        super().end_headers()
+
+    # -- routing ------------------------------------------------------------
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            # prefer the pre-bundled single-file build; fall back to the module
+            # entry point (which works fine over http:// — CORS only bites file://)
+            entry = "shell.html" if os.path.exists(os.path.join(ROOT, "shell.html")) else "index.html"
+            self.path = "/" + entry
+        if self.path == "/bridge/apps":
+            return self._json(200, {"ok": True, "native": True, "apps": installed(),
+                                    "advertised": sorted(BRIDGE)})
+        if not self._local_only():
+            return self.send_error(403, "local only")
+        if self.path == "/bridge/ping":
+            return self._json(200, {"ok": True, "native": True, "host": os.uname().nodename,
+                                    "kernel": os.uname().release,
+                                    "session": os.environ.get("XDG_SESSION_TYPE", "x11"),
+                                    "dev": DEV, "apps": installed()})
+        return super().do_GET()
+
+    def do_HEAD(self):
+        return self.do_GET()
+
+    def do_POST(self):
+        if not self._local_only():
+            return self._json(403, {"ok": False, "error": "local only"})
+        if not self.path.startswith("/bridge/"):
+            return self._json(404, {"ok": False, "error": "no such bridge"})
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, TypeError):
+            data = {}
+
+        action = posixpath.basename(self.path)
+        if action == "open":
+            name = str(data.get("app", "")).strip()
+            if name not in BRIDGE:
+                return self._json(404, {"ok": False, "error": f"{name!r} is not a native app",
+                                        "apps": sorted(BRIDGE)})
+            argv = BRIDGE[name]
+            if argv[0] == "__leave_kiosk__":
+                open("/tmp/thadd-leave-kiosk", "w").close()
+                log("kiosk exit requested")
+                return self._json(200, {"ok": True, "left": True})
+            exe = argv[0]
+            if not any(os.access(os.path.join(p, exe), os.X_OK)
+                       for p in os.environ.get("PATH", "/usr/bin:/bin").split(":")):
+                return self._json(501, {"ok": False, "error": f"{exe} is not installed on this image"})
+            try:
+                subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            except OSError as exc:
+                return self._json(500, {"ok": False, "error": str(exc)})
+            log(f"launch {name}: {' '.join(argv)}")
+            return self._json(200, {"ok": True, "app": name, "argv": argv})
+        if action == "report":
+            log("shell-report " + json.dumps(data)[:2000])
+            return self._json(200, {"ok": True})
+        return self._json(404, {"ok": False, "error": "unknown bridge action"})
+
+    def log_message(self, fmt, *args):  # keep the console quiet, journal keeps it
+        log("http " + fmt % args)
+
+
+def main():
+    if not os.path.isdir(ROOT):
+        sys.stderr.write(f"thadd-desktop-server: {ROOT} missing\n")
+        return 2
+    try:
+        os.makedirs(os.path.dirname(LOG) or ".", exist_ok=True)
+    except OSError:
+        pass   # a dev preview has no /var/log/thadd; the log simply stays quiet
+    httpd = ThreadingHTTPServer((BIND, PORT), Handler)
+    log(f"listening on http://{BIND}:{PORT} root={ROOT} dev={DEV} apps={','.join(installed())}")
+    if DEV:
+        sys.stderr.write(f"[thadd-desktop-server] DEV mode: serving {ROOT} on http://{BIND}:{PORT} "
+                         f"({len(installed())} native apps available)\n")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

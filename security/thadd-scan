@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# THADD OS forensic scanner — placeholder
+echo "thadd-scan (build placeholder)"; exit 0

@@ -12,6 +12,7 @@ import { buildMenuBar, buildDock, buildDesktopIcons, openSpotlight, closeSpotlig
 import { createWindow, windows, closeWindow, focus, minimise, restore, zoom, fullscreen, closeApp,
          toggleMission, cycleWindows, snapTo } from "./wm.js";
 import { launch, runInTerminal } from "./apps/index.js";
+import { probe as probeNative } from "./native.js";
 import { grab } from "./apps/screenshot.js";
 
 /* ═══════════════════════════ 1 · BOOT SEQUENCE ════════════════════════════ */
@@ -65,6 +66,9 @@ function startSession() {
   buildDock();
   buildDesktopIcons();
   installShortcuts();
+  /* Is this the live ISO / a native preview? If so, the bridge unlocks real
+     applications — probe never blocks the desktop and fails silently. */
+  probeNative();
   installGlobalGlue();
   paintTrayStubs();
 

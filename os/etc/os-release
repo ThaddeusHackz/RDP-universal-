@@ -1,0 +1,9 @@
+PRETTY_NAME="THADD OS 2026.10 (aurora)"
+NAME="THADD OS"
+VERSION="2026.10 (aurora)"
+VERSION_ID="2026.10"
+ID=thadd
+ID_LIKE="debian ubuntu parrot kali"
+HOME_URL="https://github.com/ThaddeusHackz/RDP-universal-"
+LOGO=thadd-logo
+ANSI_COLOR="38;2;0;194;255"
