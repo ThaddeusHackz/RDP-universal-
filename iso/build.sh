@@ -142,7 +142,31 @@ find "$ISO_DIR/config/hooks" -name '*.hook.chroot' -exec chmod 0755 {} + 2>/dev/
 
 log "lb config"
 rm -rf config/binary config/chroot config/bootstrap config/common 2>/dev/null || true
+
+# The suite and the mirrors are decided HERE, not only in config/auto/config:
+# live-build 20230502 defaults to "bullseye" and does not always pick the auto
+# script up, which is how this build spent an hour installing Debian 11 and then
+# died on 404s.  The environment is the one input live-build always honours
+# (command line > environment > defaults), and config/auto/config still wins
+# when it does run - with the same values.
+export LB_DISTRIBUTION="bookworm"
+export LB_PARENT_DISTRIBUTION="bookworm"
+export LB_ARCHITECTURE="amd64"
+export LB_MIRROR_CHROOT="http://deb.debian.org/debian/"
+export LB_MIRROR_CHROOT_SECURITY="http://security.debian.org/debian-security/"
+export LB_MIRROR_BINARY="http://deb.debian.org/debian/"
+export LB_MIRROR_BINARY_SECURITY="http://security.debian.org/debian-security/"
+export LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"
+
 lb config
+
+# Refuse to spend an hour bootstrapping the wrong release.
+if grep -rqs "bullseye" config/ 2>/dev/null; then
+  echo "  ✗ live-build still wants bullseye:" >&2
+  grep -rn "bullseye" config/ 2>/dev/null | head -5 >&2
+  die "live-build configuration is for the wrong Debian release (expected bookworm)"
+fi
+ok "suite is bookworm (live-build 20230502's default is bullseye - it is pinned here)"
 
 # ---------------------------------------------------------------------------
 # 1b. Trust nothing: print the configuration live-build actually kept, and pin

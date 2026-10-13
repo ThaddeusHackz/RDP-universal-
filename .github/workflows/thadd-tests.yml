@@ -72,6 +72,8 @@ jobs:
         run: python3 thadd/boot/tests/run_loader_test.py
 
       - name: Render the desktop gallery and demo video
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 - <<'PY'
           from thadd.server import video
@@ -86,3 +88,23 @@ jobs:
           assert info.get("frames", 0) > 100, "the video is too short"
           assert info.get("bytes", 0) > 50_000, "the video looks empty"
           PY
+          # if this step dies, leave the reason in the repository (the runner's
+          # log is not reachable from every environment)
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            mkdir -p docs/reports
+            { echo "# THADD media render - failure"; echo; echo '```'; } > docs/reports/media-render.md
+            python3 - <<'PY' >> docs/reports/media-render.md 2>&1 || true
+          import traceback
+          try:
+              from thadd.server import video
+              video.render_snapshots("/tmp/s2")
+              print(video.render_video("/tmp/v2.mp4", width=320, height=180, seconds_per_scene=0.2))
+          except Exception:
+              traceback.print_exc()
+          PY
+            echo '```' >> docs/reports/media-render.md
+            bash scripts/ci/publish-file.sh docs/reports/media-render.md \
+              "ci: media render failure [skip ci]" || true
+          fi
+          exit "$status"
