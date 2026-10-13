@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-appearance="dark" data-wallpaper="sequoia">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>THADD OS 2.0 — Nebula Prime</title>
+<meta name="description" content="THADD OS 2.0 Nebula Prime — the greatest OS ever assembled. macOS Sequoia × Windows 11 hybrid desktop, ParrotSec security arsenal, JARVIS AI, and a universal Linux core.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/apps.css">
+</head>
+<body class="booting">
+
+<!-- ══════════════════════════ BOOT SPLASH ══════════════════════════ -->
+<div id="boot">
+  <div class="boot-logo">TH</div>
+  <div class="boot-name">THADD&nbsp;OS</div>
+  <div class="boot-sub">Nebula Prime · 2.0 “Sequoia-Fluent” · amd64</div>
+  <div class="boot-bar"><i id="bootBar"></i></div>
+  <div class="boot-log mono" id="bootLog"></div>
+</div>
+
+<!-- ══════════════════════════ LOCK SCREEN ══════════════════════════ -->
+<div id="lock" class="gone">
+  <div class="lock-time" id="lockTime">09:41</div>
+  <div class="lock-date" id="lockDate">Monday, 13 October</div>
+  <div class="lock-avatar">T</div>
+  <div class="lock-user" id="lockUser">thadd</div>
+  <div class="lock-field">
+    <input id="lockPass" type="password" placeholder="Enter Password" autocomplete="off" spellcheck="false">
+    <button class="lock-go" id="lockGo" title="Unlock">→</button>
+  </div>
+  <div class="lock-hint">Enter ↵ or Touch ID · password: <b>thadd</b></div>
+</div>
+
+<!-- ══════════════════════════ DESKTOP SURFACE ══════════════════════ -->
+<div id="wallpaper"></div>
+<div id="aurora"><i></i><i></i><i></i></div>
+<div id="grain"></div>
+
+<!-- icons on the desktop -->
+<div id="deskIcons"></div>
+
+<!-- ══════════════════════════ MENU BAR ══════════════════════════ -->
+<div id="menubar">
+  <div class="mb-item strong" data-menu="apple" id="mbApple"></div>
+  <div class="mb-item mb-app" id="mbAppName">Finder</div>
+  <div class="mb-item" data-menu="file">File</div>
+  <div class="mb-item" data-menu="edit">Edit</div>
+  <div class="mb-item" data-menu="view">View</div>
+  <div class="mb-item" data-menu="go">Go</div>
+  <div class="mb-item" data-menu="window">Window</div>
+  <div class="mb-item" data-menu="help">Help</div>
+  <div class="mb-spacer"></div>
+  <div class="mb-right">
+    <button class="mb-item" id="mbAI" title="JARVIS AI (⌘J)">✦ JARVIS</button>
+    <button class="mb-item" id="mbShield" title="THADD Shield — Security Center">🛡 <span id="shieldState">Strict</span></button>
+    <div class="mb-tray" id="mbTray"></div>
+    <button class="mb-clock" id="mbClock" title="Notification Centre">Mon 09:41</button>
+  </div>
+</div>
+
+<div id="menus"></div>
+
+<!-- ══════════════════════════ WINDOW LAYER ══════════════════════════ -->
+<div id="windows"></div>
+<div id="snapGhost"></div>
+
+<!-- ══════════════════════════ MISSION CONTROL ══════════════════════════ -->
+<div id="mission"><div id="missionGrid"></div></div>
+
+<!-- ══════════════════════════ SPOTLIGHT ══════════════════════════ -->
+<div id="spotlight">
+  <div class="veil" data-close-spot></div>
+  <div class="spot-panel">
+    <div class="spot-input">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="spotInput" placeholder="Spotlight Search — apps, files, or ask JARVIS anything…" spellcheck="false" autocomplete="off">
+      <span class="spot-ai">⌘ ⇧ ⏎ = AI</span>
+    </div>
+    <div id="spotResults"></div>
+    <div class="spot-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>⏎</kbd> open</span>
+      <span><kbd>⌘⏎</kbd> ask JARVIS</span>
+      <span><kbd>esc</kbd> close</span>
+      <span style="margin-left:auto">THADD OS Index · 214 apps · 1.2M files scanned</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ CONTROL / NOTIF FLYOUTS ══════════════════════════ -->
+<div id="controlCenter" class="flyout hidden"></div>
+<div id="notifCenter" class="flyout hidden"></div>
+<div id="toasts"></div>
+
+<!-- ══════════════════════════ CONTEXT MENU ══════════════════════════ -->
+<div id="ctxMenu" class="hidden"></div>
+
+<!-- ══════════════════════════ DOCK ══════════════════════════ -->
+<div id="dock"></div>
+
+<!-- ══════════════════════════ ONBOARDING (Groq key) ══════════════════════════ -->
+<div id="onboard">
+  <div class="ob-card">
+    <div class="ob-h">Welcome to THADD OS 2.0</div>
+    <div class="ob-p">Nebula Prime is a hybrid desktop — macOS Sequoia surface, Windows 11 Fluent ergonomics, Parrot Security offensive toolkit and JARVIS, your Groq-powered AI co-pilot. Two quick things and you're in.</div>
+
+    <div class="ob-label">1 · Groq API key for JARVIS (stored only in this browser)</div>
+    <input class="ob-input" id="obKey" type="password" placeholder="gsk_…" spellcheck="false" autocomplete="off">
+    <div class="ob-note" style="margin-top:7px">Get a free key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>. Without it JARVIS runs in offline reasoning mode (still fully usable).</div>
+
+    <div class="ob-label">2 · Which OS surface do you prefer?</div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap">
+      <button class="chip on" data-surface="hybrid">Hybrid (Sequoia + Fluent)</button>
+      <button class="chip" data-surface="macos">macOS Sequoia</button>
+      <button class="chip" data-surface="windows">Windows 11</button>
+      <button class="chip" data-surface="parrot">Parrot Security</button>
+    </div>
+
+    <div class="ob-actions">
+      <button class="btn primary" id="obStart">Enter THADD OS →</button>
+      <button class="btn" id="obSkip">Skip — defaults</button>
+      <span class="ob-note" id="obState"></span>
+    </div>
+  </div>
+</div>
+
+<div id="srLive" aria-live="polite"></div>
+
+<script type="module" src="js/kernel.js"></script>
+</body>
+</html>

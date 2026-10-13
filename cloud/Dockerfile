@@ -80,10 +80,10 @@ RUN curl -fsSL https://starship.rs/install.sh | sh -s -- -y || true
 # a running deployment is on, so a stale (pre-fix) build can never masquerade
 # as the fixed one ("credentials fail" while the fix never actually shipped).
 RUN date -u +%Y-%m-%dT%H:%M:%SZ > /etc/thadd-build
-COPY config/os-release /etc/os-release
-COPY config/lsb-release /etc/lsb-release
-COPY config/thadd-release /etc/thadd-release
-COPY config/thadd-motd /etc/motd
+COPY cloud/config/os-release /etc/os-release
+COPY cloud/config/lsb-release /etc/lsb-release
+COPY cloud/config/thadd-release /etc/thadd-release
+COPY cloud/config/thadd-motd /etc/motd
 
 # ---------------------------------------------------------------------------
 # Remote-access configuration (sed patches are no-ops on unknown keys, so
@@ -104,32 +104,32 @@ RUN sed -i \
  && rm -f /etc/nginx/sites-enabled/default \
  && mkdir -p /opt/thadd/web /usr/share/backgrounds/thadd-os
 
-COPY config/supervisord.conf        /etc/supervisor/supervisord.conf
-COPY config/thadd.conf               /etc/supervisor/conf.d/thadd.conf
-COPY config/nginx.conf.template      /etc/nginx/sites-available/thadd.conf.template
-COPY config/startwm.sh               /etc/xrdp/startwm.sh
-COPY config/startwm.sh               /opt/thadd/startwm.sh
-COPY config/session.sh               /opt/thadd/session.sh
-COPY config/welcome.sh               /opt/thadd/welcome.sh
-COPY config/run-vnc.sh               /opt/thadd/run-vnc.sh
-COPY config/healthcheck.sh           /opt/thadd/healthcheck.sh
-COPY config/harden-rdp.sh            /opt/thadd/harden-rdp.sh
-COPY config/login-probe.sh           /opt/thadd/login-probe.sh
-COPY config/xrdp.ini                 /opt/thadd/xrdp.ini
-COPY config/sesman.ini               /opt/thadd/sesman.ini
-COPY config/pam-xrdp-sesman          /opt/thadd/pam-xrdp-sesman
-COPY config/xrdp.ini                 /etc/xrdp/xrdp.ini
-COPY config/sesman.ini               /etc/xrdp/sesman.ini
-COPY config/pam-xrdp-sesman          /etc/pam.d/xrdp-sesman
-COPY config/thadd                    /usr/local/bin/thadd
-COPY config/thadd-apps/              /usr/share/applications/
+COPY cloud/config/supervisord.conf        /etc/supervisor/supervisord.conf
+COPY cloud/config/thadd.conf               /etc/supervisor/conf.d/thadd.conf
+COPY cloud/config/nginx.conf.template      /etc/nginx/sites-available/thadd.conf.template
+COPY cloud/config/startwm.sh               /etc/xrdp/startwm.sh
+COPY cloud/config/startwm.sh               /opt/thadd/startwm.sh
+COPY cloud/config/session.sh               /opt/thadd/session.sh
+COPY cloud/config/welcome.sh               /opt/thadd/welcome.sh
+COPY cloud/config/run-vnc.sh               /opt/thadd/run-vnc.sh
+COPY cloud/config/healthcheck.sh           /opt/thadd/healthcheck.sh
+COPY cloud/config/harden-rdp.sh            /opt/thadd/harden-rdp.sh
+COPY cloud/config/login-probe.sh           /opt/thadd/login-probe.sh
+COPY cloud/config/xrdp.ini                 /opt/thadd/xrdp.ini
+COPY cloud/config/sesman.ini               /opt/thadd/sesman.ini
+COPY cloud/config/pam-xrdp-sesman          /opt/thadd/pam-xrdp-sesman
+COPY cloud/config/xrdp.ini                 /etc/xrdp/xrdp.ini
+COPY cloud/config/sesman.ini               /etc/xrdp/sesman.ini
+COPY cloud/config/pam-xrdp-sesman          /etc/pam.d/xrdp-sesman
+COPY cloud/config/thadd                    /usr/local/bin/thadd
+COPY cloud/config/thadd-apps/              /usr/share/applications/
 
 RUN chmod +x /etc/xrdp/startwm.sh /opt/thadd/session.sh /opt/thadd/welcome.sh \
              /opt/thadd/run-vnc.sh /opt/thadd/healthcheck.sh \
              /opt/thadd/harden-rdp.sh /opt/thadd/login-probe.sh \
              /opt/thadd/startwm.sh /usr/local/bin/thadd
 
-COPY web/                  /opt/thadd/web/
+COPY desktop/              /opt/thadd/web/
 COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/
 
 # ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ COPY assets/wallpapers/    /usr/share/backgrounds/thadd-os/
 # experience (panels, themes, dock, conky, terminal, neofetch, shell).
 # It is also re-seeded into Railway volumes at boot (see entrypoint).
 # ---------------------------------------------------------------------------
-COPY skel/ /etc/skel/
+COPY cloud/skel/ /etc/skel/
 
 RUN useradd -m -s /bin/bash -G sudo "${THADD_USER}" 2>/dev/null || true \
  && echo "${THADD_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/zz-thadd \
@@ -145,7 +145,7 @@ RUN useradd -m -s /bin/bash -G sudo "${THADD_USER}" 2>/dev/null || true \
  && touch "/home/${THADD_USER}/.thadd-seeded" \
  && chown -R "${THADD_USER}:${THADD_USER}" "/home/${THADD_USER}"
 
-COPY entrypoint.sh /entrypoint.sh
+COPY cloud/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 3389 8080
