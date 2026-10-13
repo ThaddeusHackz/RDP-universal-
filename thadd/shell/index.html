@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>THADD OS — One OS. All the Best.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="THADD OS — a bootable Linux desktop with a hybrid Windows 11 / macOS Sequoia shell, a Groq-powered OS agent, and native Windows/macOS/Linux forensics.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="/apps/assets/icons/thadd.svg">
+<link rel="stylesheet" href="/css/theme.css">
+</head>
+<body>
+
+<!-- the desktop surface: wallpaper, menubar, icons, dock and windows are built by wm.js -->
+<div id="desktop"></div>
+
+<!-- the OS surfaces its own screens over the desktop -->
+<noscript>
+  <div style="position:fixed;inset:0;display:grid;place-items:center;font-family:sans-serif;color:#e9eef8;background:#0a0c16">
+    <div style="text-align:center">
+      <h1>THADD OS</h1>
+      <p>This desktop needs JavaScript. The API is still available at <code>/api/&lt;method&gt;</code>.</p>
+    </div>
+  </div>
+</noscript>
+
+<script src="/js/core.js"></script>
+<script src="/js/wm.js"></script>
+<script src="/js/apps.js"></script>
+<script src="/js/boot.js"></script>
+</body>
+</html>

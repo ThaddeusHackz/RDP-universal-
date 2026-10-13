@@ -1,11 +1,29 @@
-# local scratch
-node_modules/
-*.log
-.tmp/
-
-# keep the CI-published screenshot in the repo
-!ci/thadd-os-screenshot.jpg
+# ---------------------------------------------------------------------------
+# build output - the kernel, the staged rootfs, the initramfs and the ISO are
+# all reproducible with the scripts in thadd/boot/, so they never get committed
+# (the released .iso lives in GitHub Releases, built by CI).
+# ---------------------------------------------------------------------------
+build/
+dist/
+out/
 
 # python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# runtime state of the OS / the service
+.thadd/
+*.log
+*.tmp
+
+# editors / os
+.DS_Store
+Thumbs.db
+*.swp
+
+# keep hand-made art that ships with the OS
+!thadd/shell/apps/**/*.svg
+!thadd/shell/apps/**/*.png
