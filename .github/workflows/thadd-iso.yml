@@ -15,7 +15,7 @@ on:
     paths:
       - "thadd/**"
       - ".github/workflows/thadd-iso.yml"
-  tags: ["v*"]
+    tags: ["v*"]
 
 permissions:
   contents: write
