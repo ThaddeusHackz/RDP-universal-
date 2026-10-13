@@ -1,196 +1,29 @@
 # THADD OS desktop ISO - live-build report
 
-- run: [38485285177](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38485285177)
-- commit: `df4b9db3247b127358a71bc8ab462cfef9c9d77c`
+- run: [38486586285](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38486586285)
+- commit: `dd368f875d00ac3bdc9c1450c1c4c96df4336fbb`
 - result: **failed**
 
 ```
 == ls dist ==
-total 260
-drwxr-xr-x  2 runner runner   4096 Oct 13 23:37 .
-drwxr-xr-x 17 runner runner   4096 Oct 13 23:37 ..
--rw-r--r--  1 root   root   115426 Oct 13 23:38 build.log
--rw-r--r--  1 runner runner 136908 Oct 13 23:38 desktop-build-trace.log
+total 32
+drwxr-xr-x  2 runner runner  4096 Oct 13 23:50 .
+drwxr-xr-x 17 runner runner  4096 Oct 13 23:50 ..
+-rw-r--r--  1 runner runner 20839 Oct 13 23:50 desktop-build-trace.log
 == ls iso ==
-total 60
-drwxr-xr-x  8 runner runner  4096 Oct 13 23:38 .
-drwxr-xr-x 17 runner runner  4096 Oct 13 23:37 ..
-drwxr-xr-x  2 root   root    4096 Oct 13 23:38 .build
-drwxr-xr-x  2 root   root    4096 Oct 13 23:37 auto
--rwxr-xr-x  1 runner runner 12438 Oct 13 23:36 build.sh
-drwxr-xr-x  6 root   root    4096 Oct 13 23:38 cache
-drwxr-xr-x 17 root   root    4096 Oct 13 23:38 chroot
-drwxr-xr-x 22 runner runner  4096 Oct 13 23:37 config
-drwxr-xr-x  3 root   root    4096 Oct 13 23:37 local
--rw-r--r--  1 runner runner  7740 Oct 13 23:36 verify.sh
--rw-r--r--  1 runner runner    53 Oct 13 23:36 version.env
+total 52
+drwxr-xr-x  6 runner runner  4096 Oct 13 23:50 .
+drwxr-xr-x 17 runner runner  4096 Oct 13 23:50 ..
+drwxr-xr-x  2 root   root    4096 Oct 13 23:50 .build
+drwxr-xr-x  2 root   root    4096 Oct 13 23:50 auto
+-rwxr-xr-x  1 runner runner 14503 Oct 13 23:49 build.sh
+drwxr-xr-x 22 runner runner  4096 Oct 13 23:50 config
+drwxr-xr-x  3 root   root    4096 Oct 13 23:50 local
+-rw-r--r--  1 runner runner  7740 Oct 13 23:49 verify.sh
+-rw-r--r--  1 runner runner    53 Oct 13 23:49 version.env
 
 == effective live-build config (iso/config/common) ==
 LB_INITSYSTEM="systemd"
-
-===== dist/build.log (first 40 lines) =====
-[2026-10-13 23:37:19] lb build 
-P: live-build 20230502
-P: Building for a debian/bookworm/amd64 system
-[2026-10-13 23:37:20] lb bootstrap 
-P: Setting up clean exit handler
-[2026-10-13 23:37:20] lb bootstrap_cache restore
-[2026-10-13 23:37:20] lb bootstrap_debootstrap 
-P: Begin bootstrapping system...
-P: If the following stage fails, the most likely cause of the problem is with your mirror configuration or a caching proxy.
-P: Running debootstrap (download-only)...
-I: Retrieving InRelease 
-I: Checking Release signature
-I: Valid Release signature (key id 4D64FEC119C2029067D6E791F8D2585B8783D481)
-I: Retrieving Packages 
-I: Validating Packages 
-I: Resolving dependencies of required packages...
-I: Resolving dependencies of base packages...
-I: Checking component main on http://deb.debian.org/debian...
-I: Retrieving adduser 3.134
-I: Validating adduser 3.134
-I: Retrieving apt 2.6.1
-I: Validating apt 2.6.1
-I: Retrieving apt-utils 2.6.1
-I: Validating apt-utils 2.6.1
-I: Retrieving base-files 12.4+deb12u15
-I: Validating base-files 12.4+deb12u15
-I: Retrieving base-passwd 3.6.1
-I: Validating base-passwd 3.6.1
-I: Retrieving bash 5.2.15-2+b13
-I: Validating bash 5.2.15-2+b13
-I: Retrieving bsdutils 1:2.38.1-5+deb12u3
-I: Validating bsdutils 1:2.38.1-5+deb12u3
-I: Retrieving coreutils 9.1-1
-I: Validating coreutils 9.1-1
-I: Retrieving cpio 2.13+dfsg-7.1
-I: Validating cpio 2.13+dfsg-7.1
-I: Retrieving cron 3.0pl1-162
-I: Validating cron 3.0pl1-162
-I: Retrieving cron-daemon-common 3.0pl1-162
-I: Validating cron-daemon-common 3.0pl1-162
-
-===== dist/build.log (last 120 lines) =====
-  9150K .......... .......... .......... .......... .......... 81% 48.1M 0s
-  9200K .......... .......... .......... .......... .......... 81% 73.6M 0s
-  9250K .......... .......... .......... .......... .......... 81%  138M 0s
-  9300K .......... .......... .......... .......... .......... 82% 36.0M 0s
-  9350K .......... .......... .......... .......... .......... 82%  267M 0s
-  9400K .......... .......... .......... .......... .......... 83% 68.1M 0s
-  9450K .......... .......... .......... .......... .......... 83% 51.7M 0s
-  9500K .......... .......... .......... .......... .......... 84%  136M 0s
-  9550K .......... .......... .......... .......... .......... 84% 95.6M 0s
-  9600K .......... .......... .......... .......... .......... 84% 55.3M 0s
-  9650K .......... .......... .......... .......... .......... 85% 53.0M 0s
-  9700K .......... .......... .......... .......... .......... 85% 44.7M 0s
-  9750K .......... .......... .......... .......... .......... 86%  336M 0s
-  9800K .......... .......... .......... .......... .......... 86%  101M 0s
-  9850K .......... .......... .......... .......... .......... 87% 65.7M 0s
-  9900K .......... .......... .......... .......... .......... 87% 55.2M 0s
-  9950K .......... .......... .......... .......... .......... 88% 61.1M 0s
- 10000K .......... .......... .......... .......... .......... 88% 57.9M 0s
- 10050K .......... .......... .......... .......... .......... 88%  251M 0s
- 10100K .......... .......... .......... .......... .......... 89% 48.8M 0s
- 10150K .......... .......... .......... .......... .......... 89% 68.6M 0s
- 10200K .......... .......... .......... .......... .......... 90% 57.9M 0s
- 10250K .......... .......... .......... .......... .......... 90% 37.5M 0s
- 10300K .......... .......... .......... .......... .......... 91%  265M 0s
- 10350K .......... .......... .......... .......... .......... 91%  142M 0s
- 10400K .......... .......... .......... .......... .......... 92% 57.8M 0s
- 10450K .......... .......... .......... .......... .......... 92% 57.1M 0s
- 10500K .......... .......... .......... .......... .......... 92% 52.9M 0s
- 10550K .......... .......... .......... .......... .......... 93%  282M 0s
- 10600K .......... .......... .......... .......... .......... 93% 83.2M 0s
- 10650K .......... .......... .......... .......... .......... 94% 57.8M 0s
- 10700K .......... .......... .......... .......... .......... 94% 48.8M 0s
- 10750K .......... .......... .......... .......... .......... 95% 69.8M 0s
- 10800K .......... .......... .......... .......... .......... 95% 47.3M 0s
- 10850K .......... .......... .......... .......... .......... 95%  256M 0s
- 10900K .......... .......... .......... .......... .......... 96% 38.5M 0s
- 10950K .......... .......... .......... .......... .......... 96%  185M 0s
- 11000K .......... .......... .......... .......... .......... 97% 59.3M 0s
- 11050K .......... .......... .......... .......... .......... 97%  907K 0s
- 11100K .......... .......... .......... .......... .......... 98% 37.3M 0s
- 11150K .......... .......... .......... .......... .......... 98% 88.9M 0s
- 11200K .......... .......... .......... .......... .......... 99% 42.5M 0s
- 11250K .......... .......... .......... .......... .......... 99% 98.5M 0s
- 11300K .......... .......... .......... .......... .......... 99% 44.9M 0s
- 11350K ......                                                100%  143M=0.3s
-
-2026-10-13 23:38:29 (40.9 MB/s) - 'cache/contents.chroot/bookworm/main/contents-amd64.gz' saved [11629145/11629145]
-
-[2026-10-13 23:38:30] lb chroot_preseed 
-P: Begin executing local preseeds...
-[2026-10-13 23:38:30] lb chroot_includes_before_packages 
-P: Begin copying chroot includes before packages have been installed...
-[2026-10-13 23:38:30] lb chroot_package-lists install
-P: Begin queueing installation of package lists (install pass)...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-Suggested packages:
-  debtags
-The following NEW packages will be installed:
-  dctrl-tools
-0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
-Need to get 104 kB of archives.
-After this operation, 432 kB of additional disk space will be used.
-Get:1 http://deb.debian.org/debian bookworm/main amd64 dctrl-tools amd64 2.24-3+b1 [104 kB]
-Fetched 104 kB in 0s (1095 kB/s)
-Selecting previously unselected package dctrl-tools.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Preparing to unpack .../dctrl-tools_2.24-3+b1_amd64.deb ...
-Unpacking dctrl-tools (2.24-3+b1) ...
-Setting up dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-The following packages will be REMOVED:
-  dctrl-tools*
-0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
-After this operation, 432 kB disk space will be freed.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8788 files and directories currently installed.)
-Removing dctrl-tools (2.24-3+b1) ...
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Purging configuration files for dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-[2026-10-13 23:38:32] lb chroot_install-packages install
-P: Begin installing packages (install pass)...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-Package firmware-linux-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-misc-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-atheros is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-However the following packages replace it:
-  firmware-ath9k-htc
-
-Package firmware-realtek is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-E: Package 'firmware-linux-nonfree' has no installation candidate
-E: Package 'firmware-misc-nonfree' has no installation candidate
-E: Package 'firmware-realtek' has no installation candidate
-E: Unable to locate package firmware-iwlwifi
-E: Package 'firmware-atheros' has no installation candidate
-E: Unable to locate package firmware-brcm80211
-E: An unexpected failure occurred, exiting...
-P: Begin unmounting filesystems...
-P: Saving caches...
-Reading package lists...
-Building dependency tree...
-Reading state information...
 
 ===== dist/desktop-build-trace.log (first 40 lines) =====
 container: Debian GNU/Linux 12 (bookworm) / debian_version=12.15
@@ -235,132 +68,126 @@ live-build package: live-build	1:20230502
 + command -v rsync
 
 ===== dist/desktop-build-trace.log (last 120 lines) =====
-Fetched 104 kB in 0s (1095 kB/s)
-Selecting previously unselected package dctrl-tools.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Preparing to unpack .../dctrl-tools_2.24-3+b1_amd64.deb ...
-Unpacking dctrl-tools (2.24-3+b1) ...
-Setting up dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-The following packages will be REMOVED:
-  dctrl-tools*
-0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
-After this operation, 432 kB disk space will be freed.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8788 files and directories currently installed.)
-Removing dctrl-tools (2.24-3+b1) ...
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Purging configuration files for dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-[2026-10-13 23:38:32] lb chroot_install-packages install
-P: Begin installing packages (install pass)...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-Package firmware-linux-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-misc-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-atheros is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-However the following packages replace it:
-  firmware-ath9k-htc
-
-Package firmware-realtek is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-E: Package 'firmware-linux-nonfree' has no installation candidate
-E: Package 'firmware-misc-nonfree' has no installation candidate
-E: Package 'firmware-realtek' has no installation candidate
-E: Unable to locate package firmware-iwlwifi
-E: Package 'firmware-atheros' has no installation candidate
-E: Unable to locate package firmware-brcm80211
-E: An unexpected failure occurred, exiting...
-P: Begin unmounting filesystems...
-P: Saving caches...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-+ tail -n 60 /work/dist/build.log
-  dctrl-tools
-0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
-Need to get 104 kB of archives.
-After this operation, 432 kB of additional disk space will be used.
-Get:1 http://deb.debian.org/debian bookworm/main amd64 dctrl-tools amd64 2.24-3+b1 [104 kB]
-Fetched 104 kB in 0s (1095 kB/s)
-Selecting previously unselected package dctrl-tools.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Preparing to unpack .../dctrl-tools_2.24-3+b1_amd64.deb ...
-Unpacking dctrl-tools (2.24-3+b1) ...
-Setting up dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-The following packages will be REMOVED:
-  dctrl-tools*
-0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.
-After this operation, 432 kB disk space will be freed.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8788 files and directories currently installed.)
-Removing dctrl-tools (2.24-3+b1) ...
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 8747 files and directories currently installed.)
-Purging configuration files for dctrl-tools (2.24-3+b1) ...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-[2026-10-13 23:38:32] lb chroot_install-packages install
-P: Begin installing packages (install pass)...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-Package firmware-linux-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-misc-nonfree is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-Package firmware-atheros is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-However the following packages replace it:
-  firmware-ath9k-htc
-
-Package firmware-realtek is not available, but is referred to by another package.
-This may mean that the package is missing, has been obsoleted, or
-is only available from another source
-
-E: Package 'firmware-linux-nonfree' has no installation candidate
-E: Package 'firmware-misc-nonfree' has no installation candidate
-E: Package 'firmware-realtek' has no installation candidate
-E: Unable to locate package firmware-iwlwifi
-E: Package 'firmware-atheros' has no installation candidate
-E: Unable to locate package firmware-brcm80211
-E: An unexpected failure occurred, exiting...
-P: Begin unmounting filesystems...
-P: Saving caches...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-+ die 'lb build failed — full log: dist/build.log'
-+ printf '%s  ✗ %s%s\n' '[38;5;203m' 'lb build failed — full log: dist/build.log' '[0m'
-[38;5;203m  ✗ lb build failed — full log: dist/build.log[0m
++ [[ LB_DISTRIBUTION == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ grep -q '^LB_DISTRIBUTION=' config/bootstrap
++ force LB_PARENT_DISTRIBUTION bookworm
++ local var=LB_PARENT_DISTRIBUTION val=bookworm f
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/bootstrap ]]
++ grep -q '^LB_PARENT_DISTRIBUTION=' config/bootstrap
++ sed -i 's|^LB_PARENT_DISTRIBUTION=.*|LB_PARENT_DISTRIBUTION="bookworm"|' config/bootstrap
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/common ]]
++ grep -q '^LB_PARENT_DISTRIBUTION=' config/common
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/binary ]]
++ grep -q '^LB_PARENT_DISTRIBUTION=' config/binary
++ [[ LB_PARENT_DISTRIBUTION == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ force LB_MIRROR_CHROOT http://deb.debian.org/debian/
++ local var=LB_MIRROR_CHROOT val=http://deb.debian.org/debian/ f
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/bootstrap ]]
++ grep -q '^LB_MIRROR_CHROOT=' config/bootstrap
++ sed -i 's|^LB_MIRROR_CHROOT=.*|LB_MIRROR_CHROOT="http://deb.debian.org/debian/"|' config/bootstrap
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/common ]]
++ grep -q '^LB_MIRROR_CHROOT=' config/common
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/binary ]]
++ grep -q '^LB_MIRROR_CHROOT=' config/binary
++ [[ LB_MIRROR_CHROOT == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ force LB_MIRROR_CHROOT_SECURITY http://security.debian.org/debian-security/
++ local var=LB_MIRROR_CHROOT_SECURITY val=http://security.debian.org/debian-security/ f
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/bootstrap ]]
++ grep -q '^LB_MIRROR_CHROOT_SECURITY=' config/bootstrap
++ sed -i 's|^LB_MIRROR_CHROOT_SECURITY=.*|LB_MIRROR_CHROOT_SECURITY="http://security.debian.org/debian-security/"|' config/bootstrap
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/common ]]
++ grep -q '^LB_MIRROR_CHROOT_SECURITY=' config/common
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/binary ]]
++ grep -q '^LB_MIRROR_CHROOT_SECURITY=' config/binary
++ [[ LB_MIRROR_CHROOT_SECURITY == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ force LB_MIRROR_BINARY http://deb.debian.org/debian/
++ local var=LB_MIRROR_BINARY val=http://deb.debian.org/debian/ f
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/bootstrap ]]
++ grep -q '^LB_MIRROR_BINARY=' config/bootstrap
++ sed -i 's|^LB_MIRROR_BINARY=.*|LB_MIRROR_BINARY="http://deb.debian.org/debian/"|' config/bootstrap
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/common ]]
++ grep -q '^LB_MIRROR_BINARY=' config/common
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/binary ]]
++ grep -q '^LB_MIRROR_BINARY=' config/binary
++ [[ LB_MIRROR_BINARY == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ force LB_MIRROR_BINARY_SECURITY http://security.debian.org/debian-security/
++ local var=LB_MIRROR_BINARY_SECURITY val=http://security.debian.org/debian-security/ f
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/bootstrap ]]
++ grep -q '^LB_MIRROR_BINARY_SECURITY=' config/bootstrap
++ sed -i 's|^LB_MIRROR_BINARY_SECURITY=.*|LB_MIRROR_BINARY_SECURITY="http://security.debian.org/debian-security/"|' config/bootstrap
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/common ]]
++ grep -q '^LB_MIRROR_BINARY_SECURITY=' config/common
++ for f in config/bootstrap config/common config/binary
++ [[ -f config/binary ]]
++ grep -q '^LB_MIRROR_BINARY_SECURITY=' config/binary
++ [[ LB_MIRROR_BINARY_SECURITY == \L\B\_\D\I\S\T\R\I\B\U\T\I\O\N ]]
++ ok 'suite + mirrors pinned to bookworm (printed above, before the fix-up)'
++ printf '%s  ✓%s %s\n' '[38;5;42m' '[0m' 'suite + mirrors pinned to bookworm (printed above, before the fix-up)'
++ log 'after the fix-up'
++ printf '%s[thadd-iso]%s %s\n' '[38;5;39m' '[0m' 'after the fix-up'
++ for f in config/bootstrap config/common
++ [[ -f config/bootstrap ]]
+[38;5;42m  ✓[0m suite + mirrors pinned to bookworm (printed above, before the fix-up)
+[38;5;39m[thadd-iso][0m after the fix-up
++ echo '  --- config/bootstrap'
+  --- config/bootstrap
++ grep -E '^LB_(DISTRIBUTION|MIRROR_BOOTSTRAP|MIRROR_CHROOT_SECURITY)=' config/bootstrap
++ sed 's/^/      /'
+      LB_DISTRIBUTION="bookworm"
+      LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"
+      LB_MIRROR_CHROOT_SECURITY="http://security.debian.org/debian-security/"
++ for f in config/bootstrap config/common
++ [[ -f config/common ]]
++ echo '  --- config/common'
+  --- config/common
++ sed 's/^/      /'
++ grep -E '^LB_(DISTRIBUTION|MIRROR_BOOTSTRAP|MIRROR_CHROOT_SECURITY)=' config/common
++ true
++ bad_config=0
++ for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' 'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'
++ grep -qE 'LB_DISTRIBUTION=.*bookworm' config/binary
++ echo '  ✗ config/binary does not carry: LB_DISTRIBUTION=.*bookworm'
+  ✗ config/binary does not carry: LB_DISTRIBUTION=.*bookworm
++ bad_config=1
++ for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' 'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'
++ grep -qE 'LB_ARCHIVE_AREAS=.*non-free-firmware' config/binary
++ echo '  ✗ config/binary does not carry: LB_ARCHIVE_AREAS=.*non-free-firmware'
+  ✗ config/binary does not carry: LB_ARCHIVE_AREAS=.*non-free-firmware
++ bad_config=1
++ for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' 'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'
++ grep -qE 'LB_BOOTLOADERS=.*grub-efi' config/binary
++ ok 'config/binary: LB_BOOTLOADERS=.*grub-efi'
++ printf '%s  ✓%s %s\n' '[38;5;42m' '[0m' 'config/binary: LB_BOOTLOADERS=.*grub-efi'
+[38;5;42m  ✓[0m config/binary: LB_BOOTLOADERS=.*grub-efi
++ for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' 'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'
++ grep -qE 'LB_IMAGE_NAME=.*THADD-OS' config/binary
++ echo '  ✗ config/binary does not carry: LB_IMAGE_NAME=.*THADD-OS'
+  ✗ config/binary does not carry: LB_IMAGE_NAME=.*THADD-OS
++ bad_config=1
++ ((  bad_config  ))
++ echo '  --- what live-build actually kept ---'
+  --- what live-build actually kept ---
++ grep -E '^LB_(DISTRIBUTION|ARCHIVE_AREAS|BOOTLOADERS|IMAGE_NAME|BOOTAPPEND|COMPRESSION|APT_OPTIONS|BINARY_IMAGE)=' config/binary
+LB_BOOTLOADERS="syslinux grub-efi"
+LB_COMPRESSION="xz"
++ die 'live-build kept the wrong configuration (see the dump above)'
++ printf '%s  ✗ %s%s\n' '[38;5;203m' 'live-build kept the wrong configuration (see the dump above)' '[0m'
+[38;5;203m  ✗ live-build kept the wrong configuration (see the dump above)[0m
 + exit 1
 
 ===== suites and mirrors the build actually contacted =====
-http://deb.debian.org/debian bookworm
-http://deb.debian.org/debian bookworm-updates
-http://deb.debian.org/debian bookworm-updates/main
-http://deb.debian.org/debian bookworm/main
-http://security.debian.org/debian-security bookworm-security
-http://security.debian.org/debian-security bookworm-security/main
 ```
