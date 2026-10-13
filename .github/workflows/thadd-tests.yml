@@ -25,8 +25,32 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq gcc binutils
-          sudo python3 -m pip install --break-system-packages -q pillow pycdlib av imageio-ffmpeg
+          sudo python3 -m pip install --break-system-packages -q pillow pycdlib av imageio-ffmpeg pyyaml
           python3 -VV
+
+      - name: Shell syntax of every workflow step
+        run: |
+          # A single stray quote inside a run: block silently kills a whole job
+          # (and the failure only shows up host-side, in a log we cannot read).
+          python3 - <<'PYLINT'
+          import subprocess, tempfile, pathlib, yaml, sys
+          bad = 0
+          for wf in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              doc = yaml.safe_load(wf.read_text())
+              for job, jd in (doc.get("jobs") or {}).items():
+                  for step in jd.get("steps") or []:
+                      script = step.get("run")
+                      if not script:
+                          continue
+                      with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as fh:
+                          fh.write(script); path = fh.name
+                      r = subprocess.run(["bash", "-n", path], capture_output=True, text=True)
+                      if r.returncode:
+                          bad += 1
+                          print(f"::error title=workflow shell syntax::{wf.name}/{job}/"
+                                f"{step.get('name')}: {r.stderr.strip().splitlines()[0]}")
+          sys.exit(1 if bad else 0)
+          PYLINT
 
       - name: Compile every Python module
         run: |
