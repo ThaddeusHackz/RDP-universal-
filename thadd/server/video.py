@@ -23,6 +23,19 @@ from pathlib import Path
 WIDTH, HEIGHT = 1600, 900
 FPS = 24
 
+# The scenes mix canvas-relative geometry (w - 140) with absolute offsets
+# (body[1] + 486) that were authored against a 1280x720 window.  A canvas that
+# cannot fit those offsets either overflows its own window or hands PIL an
+# inverted rectangle, so anything smaller is drawn on the 1280x720 floor and
+# downscaled: same picture, any size, no scene can break the renderer.
+FLOOR_W, FLOOR_H = 1280, 720
+
+
+def _stage_size(width: int, height: int) -> tuple[int, int]:
+    if width >= FLOOR_W and height >= FLOOR_H:
+        return width, height
+    return FLOOR_W, FLOOR_H
+
 ACCENT = (59, 130, 246)
 ACCENT2 = (139, 92, 246)
 OK = (34, 197, 94)
@@ -123,6 +136,18 @@ class Canvas:
                 return c[0]
             return c[:4]
 
+        # Clamp instead of exploding: PIL raises ValueError on an inverted or
+        # empty box, which used to take the whole render down with it when a
+        # scene was asked to draw on a canvas smaller than it was authored for.
+        x0, y0, x1, y1 = box
+        if x1 < x0:
+            x0, x1 = x1, x0
+        if y1 < y0:
+            y0, y1 = y1, y0
+        if (x1 - x0) < 1 or (y1 - y0) < 1:
+            return
+        box = [x0, y0, x1, y1]
+        radius = max(0, min(radius, (x1 - x0) // 2, (y1 - y0) // 2))
         self.d.rounded_rectangle(box, radius=radius, fill=rgba(fill),
                                  outline=rgba(outline), width=width)
 
@@ -1067,33 +1092,54 @@ SCENES = [
 
 
 def render_snapshots(out_dir: str, width: int = WIDTH, height: int = HEIGHT, limit: int = 0) -> list[str]:
-    """Render every scene to a PNG (the shell gallery)."""
+    """Render every scene to a PNG (the shell gallery).
+
+    The gallery exists at any resolution: scenes are drawn on the 1280x720
+    layout floor (or the requested size when that is larger) and the finished
+    frame is downscaled to ``width`` x ``height`` in one pass.
+    """
+    from PIL import Image
+
     written = []
     scenes = SCENES[:limit] if limit else SCENES
+    sw, sh = _stage_size(width, height)
     for name, fn in scenes:
-        canvas = Canvas(width, height)
+        canvas = Canvas(sw, sh)
         fn(canvas)
-        written.append(canvas.save(os.path.join(out_dir, f"{name}.png")))
+        img = canvas.img
+        if (sw, sh) != (width, height):
+            img = img.resize((width, height), Image.LANCZOS)
+        out = os.path.join(out_dir, f"{name}.png")
+        os.makedirs(out_dir, exist_ok=True)
+        img.save(out)
+        written.append(out)
     return written
 
 
 def render_video(out_path: str, width: int = 1280, height: int = 720, seconds_per_scene: float = 1.6,
                  limit: int = 0, fps: int = FPS) -> dict:
     """Render the demo MP4 (H.264 via PyAV → ffmpeg binary → GIF fallback)."""
+    from PIL import Image
+
     scenes = SCENES[:limit] if limit else SCENES
     frames_per_scene = max(2, int(seconds_per_scene * fps))
     total_frames = frames_per_scene * len(scenes)
     mode = "unknown"
+    sw, sh = _stage_size(width, height)
+    rescale = (sw, sh) != (width, height)
+
+    def _finish(img):
+        return img.resize((width, height), Image.LANCZOS) if rescale else img
 
     def frames():
         for name, fn in scenes:
-            base = Canvas(width, height)
+            base = Canvas(sw, sh)
             fn(base)
             for i in range(frames_per_scene):
                 t = i / max(1, frames_per_scene - 1)
                 img = base.img.copy()
                 _animate(img, name, t, i, base)
-                yield img
+                yield _finish(img)
 
     try:
         import av  # type: ignore

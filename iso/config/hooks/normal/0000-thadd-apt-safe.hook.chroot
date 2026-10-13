@@ -22,7 +22,7 @@ mkdir -p /usr/share/thadd/packages
 cp -f /opt/thadd/iso-packages/*.txt /usr/share/thadd/packages/ 2>/dev/null || true
 cp -f /usr/share/thadd/packages/optional-extras.txt /tmp/ 2>/dev/null || true
 
-for set in optional-extras optional-dev optional-security optional-forensics optional-desktop; do
+for set in optional-firmware optional-extras optional-dev optional-security optional-forensics optional-desktop; do
     f="/tmp/${set}.txt"
     [ -f "$f" ] || continue
     echo "» set: $set"

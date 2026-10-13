@@ -117,7 +117,12 @@ The repository does not trust the ISOs — it proves them, on every push:
 | Every file extracted from the finished ISO is **hash-identical** to its source; the El Torito entry is spec-correct (platform `0xEF`, no-emulation, 4,152 sectors) | `thadd-iso.yml` → *Verify the disc* |
 | The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
 | The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
-| The gallery and the demo video still render on a clean machine | `thadd-tests.yml` |
+| The gallery and the demo video still render on a clean machine — at the full design size **and** down-scaled, so no scene can overflow its own window | `thadd-tests.yml` |
+
+![THADD OS desktop, captured over a real RDP session inside CI](ci/thadd-os-screenshot.jpg)
+
+*Not a mock-up: this is the running THADD OS desktop, screenshotted over an RDP login inside the CI
+runner and pushed back into the repository by `thadd-os-ci.yml` on every boot test.*
 
 The kernel and initramfs are kept on the ISO 9660 volume rather than in the El Torito boot image,
 because that image's size is a 16-bit field in the boot catalog (32 MB ceiling). To make that safe on
@@ -152,6 +157,7 @@ sudo ./iso/build.sh                                                  # -> dist/T
 
 # the media in this README
 python3 -c "from thadd.server import video; video.render_demo()"     # gallery + MP4
+python3 thadd/server/tests/test_render.py                            # ...and prove it renders
 ```
 
 CI runs all of it on every push: [`thadd-iso.yml`](.github/workflows/thadd-iso.yml) builds and

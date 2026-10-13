@@ -66,9 +66,3 @@ network-manager
 network-manager-gnome
 policykit-1
 firmware-linux-free
-firmware-linux-nonfree
-firmware-misc-nonfree
-firmware-realtek
-firmware-iwlwifi
-firmware-atheros
-firmware-brcm80211

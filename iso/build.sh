@@ -143,24 +143,33 @@ find "$ISO_DIR/config/hooks" -name '*.hook.chroot' -exec chmod 0755 {} + 2>/dev/
 log "lb config"
 rm -rf config/binary config/chroot config/bootstrap config/common 2>/dev/null || true
 
-# The suite and the mirrors are decided HERE, not only in config/auto/config:
-# live-build 20230502 defaults to "bullseye" and does not always pick the auto
-# script up, which is how this build spent an hour installing Debian 11 and then
-# died on 404s.  The environment is the one input live-build always honours
-# (command line > environment > defaults), and config/auto/config still wins
-# when it does run - with the same values.
+# Everything this image is (release, mirrors, archive areas, bootloaders, live
+# boot parameters, volume label) is declared once, in the repository's own
+# config/auto/config.  live-build 20230502 (Debian 12) does not reliably source
+# that file, and when it skips it, every option inside is silently lost: the run
+# that motivated this comment bootstrapped Debian 11 (20230502's default is
+# bullseye) with a main-only archive area, so it died on retired mirrors and on
+# firmware packages that live in non-free-firmware.  Running the auto script
+# explicitly puts its flags on the command line, the one input live-build always
+# honours (command line > environment > defaults); the exports below repeat the
+# release-critical ones as a second line of defence.
 export LB_DISTRIBUTION="bookworm"
 export LB_PARENT_DISTRIBUTION="bookworm"
 export LB_ARCHITECTURE="amd64"
+export LB_ARCHIVE_AREAS="main contrib non-free non-free-firmware"
+export LB_PARENT_ARCHIVE_AREAS="main contrib non-free non-free-firmware"
 export LB_MIRROR_CHROOT="http://deb.debian.org/debian/"
 export LB_MIRROR_CHROOT_SECURITY="http://security.debian.org/debian-security/"
 export LB_MIRROR_BINARY="http://deb.debian.org/debian/"
 export LB_MIRROR_BINARY_SECURITY="http://security.debian.org/debian-security/"
 export LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"
 
-lb config
+if ! sh config/auto/config; then
+  die "config/auto/config failed - the flags above are the fallback, but the repo's own configuration is authoritative"
+fi
+ok "iso/config/auto/config applied (command line, not left to the auto script)"
 
-# Refuse to spend an hour bootstrapping the wrong release.
+# 1a. Refuse to spend an hour bootstrapping the wrong release.
 if grep -rqs "bullseye" config/ 2>/dev/null; then
   echo "  ✗ live-build still wants bullseye:" >&2
   grep -rn "bullseye" config/ 2>/dev/null | head -5 >&2
@@ -208,6 +217,33 @@ if [[ -f config/common ]]; then
     echo "  --- $f"
     grep -E '^LB_(DISTRIBUTION|MIRROR_BOOTSTRAP|MIRROR_CHROOT_SECURITY)=' "$f" | sed 's/^/      /' || true
   done
+
+  # The two settings that killed the previous run: a main-only archive area
+  # (every firmware package unreachable) and a lost bootloader set (unbootable
+  # ISO).  Both are cheap to check here and expensive to discover an hour into
+  # `lb build`, so they are checked here.
+  bad_config=0
+  for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' \
+              'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'; do
+    if grep -qE "$want" config/binary 2>/dev/null; then
+      ok "config/binary: $want"
+    else
+      echo "  ✗ config/binary does not carry: $want" >&2
+      bad_config=1
+    fi
+  done
+  if (( bad_config )); then
+    echo "  --- what live-build actually kept ---" >&2
+    grep -E '^LB_(DISTRIBUTION|ARCHIVE_AREAS|BOOTLOADERS|IMAGE_NAME|BOOTAPPEND|COMPRESSION|APT_OPTIONS|BINARY_IMAGE)=' config/binary >&2 || true
+    die "live-build kept the wrong configuration (see the dump above)"
+  fi
+  if grep -rqs "non-free-firmware" config/bootstrap config/common 2>/dev/null; then
+    ok "bootstrap/chroot archive areas include non-free-firmware"
+  else
+    echo "  ✗ the bootstrap stage has a main-only archive area:" >&2
+    grep -rn "ARCHIVE_AREAS" config/bootstrap config/common 2>/dev/null >&2 || true
+    die "non-free-firmware is not enabled for the chroot bootstrap (firmware packages would be unreachable)"
+  fi
 else
   warn "no config/common after lb config - live-build printed its own diagnostics above"
 fi

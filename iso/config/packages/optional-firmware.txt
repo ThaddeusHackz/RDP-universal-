@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+#  THADD OS · hardware firmware (non-free-firmware archive area)
+# ---------------------------------------------------------------------------
+#  Installed through thadd-apt-safe, which skips anything that does not resolve
+#  and logs it, so a renamed firmware package can never take down a 30-minute
+#  ISO build (it did: firmware-atheros etc. were unreachable, because live-build
+#  20230502 silently ignored iso/config/auto/config and built a `main`-only
+#  image).  The archive area is now pinned in iso/build.sh and verified there.
+#
+#  WiFi / Bluetooth / Ethernet / GPU firmware for running the ISO on real
+#  hardware - virtual machines do not need it, laptops do.
+firmware-linux-free
+firmware-linux-nonfree
+firmware-misc-nonfree
+firmware-realtek
+firmware-iwlwifi
+firmware-atheros
+firmware-brcm80211
+firmware-amd-graphics
+intel-microcode
+amd64-microcode

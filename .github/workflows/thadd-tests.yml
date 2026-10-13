@@ -75,36 +75,34 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 - <<'PY'
-          from thadd.server import video
-          shots = video.render_snapshots("/tmp/snapshots")
-          info = video.render_video("/tmp/thadd-os-demo.mp4", width=640, height=360,
-                                    seconds_per_scene=0.4)
-          print(f"snapshots: {len(shots)}  video: {info['frames']} frames "
-                f"{info['seconds']}s via {info['mode']}")
-          assert len(shots) >= 30, "the gallery lost scenes"
-          # the video must be a real encode (H.264), not the GIF fallback
-          assert info.get("mode") in ("pyav-h264", "ffmpeg-h264"), info
-          assert info.get("frames", 0) > 100, "the video is too short"
-          assert info.get("bytes", 0) > 50_000, "the video looks empty"
-          PY
-          # if this step dies, leave the reason in the repository (the runner's
-          # log is not reachable from every environment)
-          status=$?
+          # GitHub runs every `run:` block as `bash -e`, so a failing assertion
+          # used to end this step *before* the failure report below was written:
+          # the job looked like a flake and the reason stayed on the runner.
+          set +e
+          render_log=/tmp/media-render.log
+          python3 thadd/server/tests/test_render.py 2>&1 | tee "$render_log"
+          status="${PIPESTATUS[0]}"
           if [ "$status" -ne 0 ]; then
             mkdir -p docs/reports
-            { echo "# THADD media render - failure"; echo; echo '```'; } > docs/reports/media-render.md
-            python3 - <<'PY' >> docs/reports/media-render.md 2>&1 || true
-          import traceback
-          try:
-              from thadd.server import video
-              video.render_snapshots("/tmp/s2")
-              print(video.render_video("/tmp/v2.mp4", width=320, height=180, seconds_per_scene=0.2))
-          except Exception:
-              traceback.print_exc()
-          PY
+            {
+              echo "# THADD media render - failure"
+              echo
+              echo "The desktop gallery / demo mp4 did not render (exit status \`$status\`)."
+              echo "Reproduce locally with: \`python3 thadd/server/tests/test_render.py\`"
+              echo
+              echo "## Render output"
+              echo
+              echo '```'
+              tail -n 60 "$render_log" 2>/dev/null
+              echo '```'
+              echo
+              echo "## Reproduced from scratch (quick mode)"
+              echo
+              echo '```'
+            } > docs/reports/media-render.md
+            python3 thadd/server/tests/test_render.py --quick >> docs/reports/media-render.md 2>&1 || true
             echo '```' >> docs/reports/media-render.md
             bash scripts/ci/publish-file.sh docs/reports/media-render.md \
-              "ci: media render failure [skip ci]" || true
+              "ci: media render failure report [skip ci]" || true
           fi
           exit "$status"
