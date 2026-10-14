@@ -87,6 +87,11 @@ stage() { # stage <src-relative-to-repo> <dest-in-image>
   rsync -a --exclude 'node_modules/' --exclude '__pycache__/' --exclude '*.pyc' \
         --exclude 'bundle.js' --exclude '*.log' --exclude '.git/' \
         --exclude 'package-lock.json' "$src" "$dest"
+  # Scripts must arrive executable: git only carries the exec bit when the file
+  # was committed with it, and a 0644 tool inside the ISO is a broken promise
+  # (it silently disabled the optional-package installer for two releases).
+  find "$dest" -type f \( -name '*.sh' -o -name '*.hook' -o -name 'thadd*' -o -path '*/bin/*' \) \
+    -exec chmod 0755 {} + 2>/dev/null || true
   ok "$1 -> /$2"
 }
 

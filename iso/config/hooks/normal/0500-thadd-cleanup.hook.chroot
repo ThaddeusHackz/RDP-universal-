@@ -21,6 +21,21 @@ rm -rf /usr/share/doc/*/examples 2>/dev/null || true
 rm -rf /usr/share/locale/*/LC_MESSAGES/*.mo 2>/dev/null || true
 mkdir -p /var/log/thadd
 
+# ---- everything runnable must be runnable --------------------------------
+# Helpers are written by the other hooks with `cat > /usr/local/bin/...`, and
+# whether they end up executable depends on a chmod that is easy to forget (the
+# same trap as a tool committed to git without its exec bit: the optional
+# package installer was silently skipped for exactly that reason).  The live
+# image is the last place to notice, so sweep here.
+for d in /usr/local/bin /usr/local/sbin; do
+    [ -d "$d" ] || continue
+    find "$d" -maxdepth 1 -type f -exec chmod 0755 {} + 2>/dev/null || true
+done
+for d in /opt/thadd /usr/share/thadd; do
+    [ -d "$d" ] || continue
+    find "$d" -type f \( -name '*.sh' -o -name 'thadd' -o -name 'thadd-*' \) -exec chmod 0755 {} + 2>/dev/null || true
+done
+
 # ---- runtime directories the live system expects -------------------------
 mkdir -p /var/log/thadd /var/lib/thadd /run/thadd
 chmod 755 /var/log/thadd /var/lib/thadd

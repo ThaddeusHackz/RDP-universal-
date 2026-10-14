@@ -9,14 +9,21 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive
 
 THADD=/opt/thadd
-VERSION="$(sed -n 's/^THADD_OS_VERSION=//p' "$THADD/build-info" 2>/dev/null | head -1)"
-CODENAME="$(sed -n 's/^THADD_OS_CODENAME=//p' "$THADD/build-info" 2>/dev/null | head -1)"
+for _info in /etc/thadd/build-info "$THADD/build-info"; do
+    [ -f "$_info" ] || continue
+    VERSION="$(sed -n 's/^THADD_OS_VERSION=//p' "$_info" | head -1)"
+    CODENAME="$(sed -n 's/^THADD_OS_CODENAME=//p' "$_info" | head -1)"
+    [ -n "$VERSION" ] && break
+done
 : "${VERSION:=rolling}"; : "${CODENAME:=aurora}"
 
 echo "── THADD OS · identity ${VERSION} (${CODENAME}) ──"
 
 # ---- os-release family ---------------------------------------------------
-cat > /etc/os-release <<EOF
+# /etc/os-release is a *symlink* to /usr/lib/os-release on bookworm.  `cp` from
+# one to the other fails with "are the same file", and with `set -eu` that ended
+# the build: write the real file, then point the symlink at it.
+cat > /usr/lib/os-release <<EOF
 PRETTY_NAME="THADD OS ${VERSION} (${CODENAME})"
 NAME="THADD OS"
 VERSION="${VERSION} (${CODENAME})"
@@ -32,7 +39,7 @@ LOGO=thadd-logo
 ANSI_COLOR="38;2;0;194;255"
 THADD_BUILD="$(cat /etc/thadd/build-info 2>/dev/null | tr '\n' ' ')"
 EOF
-cp -f /etc/os-release /usr/lib/os-release
+ln -sf ../usr/lib/os-release /etc/os-release
 
 cat > /etc/lsb-release <<EOF
 DISTRIB_ID="THADD OS"

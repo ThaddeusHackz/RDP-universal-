@@ -10,7 +10,10 @@ echo "────────────────────────�
 echo " THADD OS · optional package sets (tolerant install)"
 echo "──────────────────────────────────────────────────────────"
 
-if [ -x /opt/thadd/tools/bin/thadd-apt-safe ]; then
+# Test for the file, not for its mode: git only carries the executable bit when
+# it was committed with it, and a 0644 tool silently skipped every optional
+# package set (firmware, dev toolchain, security, forensics, desktop extras).
+if [ -f /opt/thadd/tools/bin/thadd-apt-safe ]; then
     install -m 0755 /opt/thadd/tools/bin/thadd-apt-safe /usr/local/sbin/thadd-apt-safe
 else
     echo "thadd-apt-safe not staged — skipping optional sets"; exit 0
