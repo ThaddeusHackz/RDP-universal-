@@ -149,5 +149,16 @@ jobs:
           [ -f "$NOTES" ] || printf 'THADD OS desktop live ISO (hybrid BIOS + UEFI).\n' > "$NOTES"
           gh release view "$TAG" >/dev/null 2>&1 || \
             gh release create "$TAG" --title "THADD OS ${TAG#v}" --notes-file "$NOTES"
-          gh release upload "$TAG" dist/*.iso --clobber
-          gh release view "$TAG" --json assets --jq '.assets[].name'
+          # GitHub caps one release asset at 2 GiB: a desktop ISO with the full
+          # browser/dev/security stack can cross that, and iso/build.sh already
+          # split it into 1900 MiB parts when it did.
+          shopt -s nullglob
+          parts=(dist/*.part-*)
+          if (( ${#parts[@]} > 0 )); then
+            echo "uploading ${#parts[@]} parts (the ISO is over the 2 GiB asset limit)"
+            gh release upload "$TAG" "${parts[@]}" dist/parts.sha256 --clobber
+          else
+            gh release upload "$TAG" dist/*.iso --clobber
+          fi
+          gh release upload "$TAG" dist/RELEASE-NOTES.md --clobber || true
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'
