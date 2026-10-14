@@ -177,6 +177,12 @@ case "$MODE" in
         echo 'ID=thadd'
         exit 0
         ;;
+      etc/thadd/selfcheck.txt)
+        echo "  PASS  desktop shell"
+        echo "  31 passed · 0 failed · 9 warned"
+        echo "  THADD desktop: OK"
+        exit 0
+        ;;
     esac
     exit 1
     ;;

@@ -205,6 +205,22 @@ else
   grep -q 'ID=thadd' <<<"$OSR" && pass "ID=thadd" || warn "ID=thadd missing"
 fi
 
+# ---- what the image's own self-test concluded during the build -------------
+# 0500-thadd-cleanup runs /usr/local/bin/thadd-desktop-selftest inside the
+# chroot and records the output.  That is the one check made from *inside* the
+# system being shipped, so its verdict is read here: a desktop that could not
+# prove itself at build time must not be published as if it could.
+SELFCHECK="$(unsquashfs -cat "$SQ" etc/thadd/selfcheck.txt 2>/dev/null || true)"
+if [[ -z "$SELFCHECK" ]]; then
+  warn "no /etc/thadd/selfcheck.txt — the in-image self-test did not run during the build"
+elif grep -qE '^ *FAIL ' <<<"$SELFCHECK"; then
+  fail "the in-image self-test reported problems: $(grep -m3 -E '^ *FAIL ' <<<"$SELFCHECK" | tr -s ' ' | tr '\n' ';')"
+elif grep -qi 'THADD desktop: OK' <<<"$SELFCHECK"; then
+  pass "in-image self-test: $(grep -m1 -E 'passed' <<<"$SELFCHECK" | tr -s ' ' | sed 's/^ *//')"
+else
+  warn "in-image self-test output present but no verdict line: $(head -1 <<<"$SELFCHECK")"
+fi
+
 head1 "kernel + initramfs"
 if unsquashfs -ll "$SQ" "boot" >/dev/null 2>&1; then
   K="$(unsquashfs -ll "$SQ" boot 2>/dev/null | awk '/vmlinuz/{print $NF}' | head -1)"
