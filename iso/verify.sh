@@ -154,13 +154,34 @@ head1 "boot menus (what the firmware actually offers)"
 # whose isolinux.cfg points at a kernel that is not on the disc boots to a
 # prompt, and a menu without the live parameters boots to a kernel panic.  These
 # are the entries a VirtualBox user picks, so they are read and checked.
-ISO_CFG="$(xorriso -indev "$ISO_PATH" -osirrox on -extract /isolinux/isolinux.cfg "$WORK/isolinux.cfg" >/dev/null 2>&1 && cat "$WORK/isolinux.cfg" 2>/dev/null || true)"
-[[ -n "$ISO_CFG" ]] || ISO_CFG="$(xorriso -indev "$ISO_PATH" -osirrox on -extract /isolinux/syslinux.cfg "$WORK/isolinux.cfg" >/dev/null 2>&1 && cat "$WORK/isolinux.cfg" 2>/dev/null || true)"
-if [[ -z "$ISO_CFG" ]]; then
+# debian-live splits this: isolinux.cfg holds `default vesamenu.c32` and an
+# `include` of the file that carries the actual entries (menu.cfg / live.cfg /
+# stdmenu.cfg, depending on version).  Reading only isolinux.cfg made a perfectly
+# good menu look like three failures - so every candidate is read and the checks
+# run over the union, with the sources named.
+MENU_FILE="$WORK/isolinux-menu.txt"
+: > "$MENU_FILE"
+MENU_SOURCES=""
+for cfgpath in isolinux/isolinux.cfg isolinux/syslinux.cfg isolinux/menu.cfg isolinux/live.cfg \
+               isolinux/stdmenu.cfg isolinux/splash.cfg syslinux/syslinux.cfg; do
+  dest="$WORK/menu-$(tr '/' '_' <<<"$cfgpath")"
+  if xorriso -indev "$ISO_PATH" -osirrox on -extract "/$cfgpath" "$dest" >/dev/null 2>&1 && [[ -s "$dest" ]]; then
+    printf '\n# ===== %s =====\n' "$cfgpath" >> "$MENU_FILE"
+    cat "$dest" >> "$MENU_FILE"
+    MENU_SOURCES="$MENU_SOURCES $cfgpath"
+  fi
+done
+ISO_CFG="$(cat "$MENU_FILE" 2>/dev/null || true)"
+if [[ -z "${MENU_SOURCES// /}" ]]; then
   warn "no isolinux configuration on the ISO — the BIOS menu cannot be checked"
 else
-  menus_seen="$(grep -cE '^label ' <<<"$ISO_CFG" || true)"
-  (( menus_seen >= 1 )) && pass "$menus_seen BIOS boot entr(ies) defined" || warn "no boot entries in the BIOS menu"
+  printf '  %s\n' "menu source(s):$MENU_SOURCES"
+  menus_seen="$(grep -cE '^[[:space:]]*label ' <<<"$ISO_CFG" || true)"
+  if (( menus_seen >= 1 )); then
+    pass "$menus_seen BIOS boot entr(ies) defined: $(grep -hoE '^[[:space:]]*label [^ ]+' <<<"$ISO_CFG" | awk '{print $2}' | tr '\n' ' ')"
+  else
+    warn "no BIOS boot entries found in any menu file ($MENU_SOURCES)"
+  fi
   grep -qE '^\s*default ' <<<"$ISO_CFG" && pass "default entry: $(grep -m1 -E '^\s*default ' <<<"$ISO_CFG" | tr -s ' ')"
   if grep -q 'boot=live' <<<"$ISO_CFG"; then
     pass "the live parameters are on the menu (boot=live)"
@@ -182,13 +203,6 @@ if [[ -n "$GRUB_CFG" ]]; then
 else
   warn "no /boot/grub/grub.cfg on the ISO — UEFI boot is provided by the EFI image alone"
 fi
-
-head1 "documentation shipped with the image"
-# The login banner and /etc/thadd/security-posture point at these files; a pointer
-# to a missing file is worse than no pointer.
-for doc in SECURITY.md QUICKSTART.md AI.md; do
-  need_file "usr/share/doc/thadd/$doc" "documentation: $doc" soft
-done
 
 head1 "ship contents (deeper look inside the squashfs)"
 SQ="$WORK/filesystem.squashfs"
@@ -307,6 +321,13 @@ elif grep -qi 'THADD desktop: OK' <<<"$SELFCHECK"; then
 else
   warn "in-image self-test output present but no verdict line: $(head -1 <<<"$SELFCHECK")"
 fi
+
+head1 "documentation shipped with the image"
+# The login banner and /etc/thadd/security-posture point at these files; a pointer
+# to a missing file is worse than no pointer.
+for doc in SECURITY.md QUICKSTART.md AI.md; do
+  need_file "usr/share/doc/thadd/$doc" "documentation: $doc" soft
+done
 
 head1 "optional package sets (what the tolerant installer did)"
 # thadd-apt-safe logs every run to /var/log/thadd/apt-safe.log.  Reading it out of

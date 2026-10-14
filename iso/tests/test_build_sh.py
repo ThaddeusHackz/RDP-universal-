@@ -138,13 +138,26 @@ if [ -n "$EXTRACT" ]; then
   mkdir -p "$(dirname "$DEST")" 2>/dev/null
   case "$EXTRACT" in
     /live/filesystem.squashfs) dd if=/dev/zero of="$DEST" bs=1024 count=512 status=none;;
-    /isolinux/isolinux.cfg|/isolinux/syslinux.cfg)
+    /isolinux/isolinux.cfg)
+      # debian-live's real shape: a pointer file that *includes* the entries - the
+      # verifier has to follow it, which it once did not
       {
-        echo "default live"
+        echo "default vesamenu.c32"
+        echo "prompt 0"
+        echo "timeout 0"
+        echo "include menu.cfg"
+      } > "$DEST";;
+    /isolinux/syslinux.cfg)
+      echo "default vesamenu.c32" > "$DEST";;
+    /isolinux/menu.cfg)
+      {
+        echo "menu title THADD OS"
         echo "label live"
+        echo "  menu label ^Live (amd64)"
         echo "  kernel /live/vmlinuz"
         echo "  append initrd=/live/initrd.img boot=live components quiet splash"
         echo "label safe"
+        echo "  menu label ^Safe mode"
         echo "  kernel /live/vmlinuz"
         echo "  append initrd=/live/initrd.img boot=live components nomodeset"
       } > "$DEST";;
@@ -169,7 +182,7 @@ if [ "$TORITO" = 1 ]; then
 fi
 if [ "$LIST" = 1 ]; then
   for f in /live/filesystem.squashfs /live/vmlinuz /live/initrd.img \
-           /isolinux/isolinux.bin /isolinux/isolinux.cfg /isolinux/isohdpfx.bin \
+           /isolinux/isolinux.bin /isolinux/isolinux.cfg /isolinux/menu.cfg /isolinux/isohdpfx.bin \
            /boot/grub/efi.img /boot/grub/grub.cfg; do echo "$f"; done
   exit 0
 fi
@@ -422,7 +435,10 @@ def main() -> int:
             f"-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/{path}\n"
             for path in sorted(wanted)
         ) + "-rw-r--r-- root/root 16512872 2026-10-14 12:00 squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64\n"
-          + "-rw-r--r-- root/root 57010176 2026-10-14 12:00 squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64\n")
+          + "-rw-r--r-- root/root 57010176 2026-10-14 12:00 squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64\n"
+          + "-rw-r--r-- root/root 8466 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/SECURITY.md\n"
+          + "-rw-r--r-- root/root 6706 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/QUICKSTART.md\n"
+          + "-rw-r--r-- root/root 6054 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/AI.md\n")
 
         good_env = dict(env)
         good_env["PATH"] = f"{good_bin}:{good_env['PATH']}"
@@ -452,6 +468,15 @@ def main() -> int:
         check("the BIOS boot menu is read and its live parameters checked",
               "boot=live" in out and "BIOS boot entr" in out,
               [l for l in out.splitlines() if "menu" in l][:3])
+        check("it follows the included menu file (debian-live splits the entries out)",
+              "menu.cfg" in out and "2 BIOS boot entr" in out,
+              [l for l in out.splitlines() if "menu source" in l or "entr(ies)" in l][:3])
+        check("the documentation inside the image is checked, not assumed",
+              "PASS documentation: SECURITY.md" in out,
+              [l for l in out.splitlines() if "documentation" in l][:3])
+        check("no shell errors leaked into the verification report",
+              "command not found" not in out,
+              [l for l in out.splitlines() if "command not found" in l][:2])
         check("the UEFI menu is checked too", "GRUB menu carries the live parameters" in out,
               [l for l in out.splitlines() if "GRUB" in l][:2])
         check("the optional sets are reported from the installer's own report",
