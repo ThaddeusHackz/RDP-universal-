@@ -197,12 +197,23 @@ case "$MODE" in
         echo "  THADD desktop: OK"
         exit 0
         ;;
-      var/log/thadd/apt-safe.log)
+      usr/share/thadd/thirdparty-report.txt)
+        echo "THADD OS third-party toolchain"
+        echo "=============================="
+        echo "  powershell=installed"
+        echo "  metasploit=installed"
+        echo "  radare2=not-packaged"
+        exit 0
+        ;;
+      usr/share/thadd/apt-safe-report.txt|var/log/thadd/apt-safe.log)
+        echo "THADD OS optional package sets"
+        echo "=============================="
         for n in 10 105 203 164 176 64 10; do
           echo "thadd-apt-safe: $n resolvable / $n requested"
           echo "installing $n packages in one batch"
           echo "batch install OK"
         done
+        echo "not in any configured repo (skipped): metasploit-framework radare2 powershell"
         exit 0
         ;;
     esac
@@ -383,6 +394,9 @@ def main() -> int:
             parts = line.split()
             if len(parts) >= 2 and parts[0] == "need_file":
                 wanted.add(parts[1])
+            elif len(parts) >= 4 and parts[0] == "need_any":
+                # need_any <name> <hard|soft> <path>...: provide the first path
+                wanted.add(parts[3])
         withheld = "usr/bin/chromium"
         wanted.discard(withheld)
         inventory = tmp / "inventory.txt"
@@ -417,9 +431,15 @@ def main() -> int:
               [l for l in out.splitlines() if "Chromium" in l][:2])
         check("everything present is still reported as present",
               f"PASS git" in out and "PASS python3" in out)
-        check("the optional sets are reported from the image log",
+        check("the optional sets are reported from the installer's own report",
               "installer ran 7 optional" in out,
               [l for l in out.splitlines() if "optional set" in l][:3])
+        check("the third-party step is reported too",
+              "third-party: powershell=installed" in out and "radare2=not-packaged" in out,
+              [l for l in out.splitlines() if "third-party" in l][:4])
+        check("packages Debian does not ship are surfaced, not hidden",
+              "not in this release's repos" in out and "metasploit-framework" in out,
+              [l for l in out.splitlines() if "repos" in l][:2])
     finally:
         AUTO.write_bytes(saved_auto)
         AUTO.chmod(stat.S_IMODE(saved_mode))

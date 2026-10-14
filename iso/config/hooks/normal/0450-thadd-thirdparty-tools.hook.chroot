@@ -1,0 +1,134 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0450-thadd-thirdparty-tools
+# =============================================================================
+#  Three of the tools the OS promises are not in Debian's own archive:
+#
+#    powershell        Microsoft's repo (packages.microsoft.com)
+#    metasploit        Rapid7's repo (apt.metasploit.com) — the HTB-class console
+#    radare2           not packaged for bookworm at all (upstream dropped it);
+#                      if a later release has it, apt picks it up here
+#
+#  This hook tries each one, tolerantly: no network, a dead mirror or a renamed
+#  package can never fail the image build (0400-class hardening still applies, and
+#  the verification step reports what actually landed).  Everything is written to
+#  /usr/share/thadd/thirdparty-report.txt, which iso/verify.sh reads back out of
+#  the shipped squashfs.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+echo "── THADD OS · third-party toolchain ──"
+
+LOG_DIR=/var/log/thadd
+LOG="$LOG_DIR/thirdparty.log"
+mkdir -p "$LOG_DIR" /usr/share/thadd 2>/dev/null || true
+: >> "$LOG" 2>/dev/null || LOG=/dev/null
+say() { printf '%s\n' "$*" | tee -a "$LOG" >&2; }
+
+APT_OPTS="-y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+RESULTS=""
+
+# ---- fetch: curl, wget or python3, whichever exists -------------------------
+fetch() { # fetch <url> <dest>
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --retry 2 --connect-timeout 20 "$1" -o "$2"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --tries=2 --timeout=20 -O "$2" "$1"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 - "$1" "$2" <<'PY'
+import sys, urllib.request
+try:
+    with urllib.request.urlopen(sys.argv[1], timeout=30) as r, open(sys.argv[2], "wb") as fh:
+        fh.write(r.read())
+except Exception as exc:
+    print(f"fetch failed: {exc}", file=sys.stderr)
+    sys.exit(1)
+PY
+    else
+        say "no curl/wget/python3 to fetch $1"
+        return 1
+    fi
+}
+
+# ---- 1. PowerShell (Microsoft) ---------------------------------------------
+say "» powershell: adding Microsoft's package repository"
+CODENAME="$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release 2>/dev/null | head -1)"
+case "${CODENAME:-bookworm}" in
+    bookworm) MS_DEB="https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" ;;
+    *)        MS_DEB="https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" ;;
+esac
+if fetch "$MS_DEB" /tmp/packages-microsoft-prod.deb; then
+    if dpkg -i /tmp/packages-microsoft-prod.deb >>"$LOG" 2>&1; then
+        say "  repository added"
+        if apt-get update -qq -o Acquire::Retries=3 >>"$LOG" 2>&1; then
+            if apt-get install $APT_OPTS powershell >>"$LOG" 2>&1; then
+                say "  ✓ powershell installed"
+                RESULTS="${RESULTS}powershell=installed\n"
+            else
+                say "  ✗ powershell could not be installed (see apt output above)"
+                RESULTS="${RESULTS}powershell=failed\n"
+            fi
+        else
+            say "  ✗ apt-get update failed after adding the repository"
+            RESULTS="${RESULTS}powershell=update-failed\n"
+        fi
+    else
+        say "  ✗ the Microsoft repository package did not install"
+        RESULTS="${RESULTS}powershell=repo-failed\n"
+    fi
+else
+    say "  ✗ could not download the Microsoft repository package (offline?)"
+    RESULTS="${RESULTS}powershell=unreachable\n"
+fi
+rm -f /tmp/packages-microsoft-prod.deb
+
+# ---- 2. Metasploit (Rapid7's repository, the msfinstall arrangement) --------
+say "» metasploit: adding Rapid7's package repository"
+if fetch "https://apt.metasploit.com/metasploit-framework.gpg.key" /tmp/msf.key; then
+    if command -v gpg >/dev/null 2>&1 && gpg --dearmor </tmp/msf.key >/usr/share/keyrings/metasploit-framework.gpg 2>>"$LOG"; then
+        printf 'deb [signed-by=/usr/share/keyrings/metasploit-framework.gpg] https://apt.metasploit.com/ lucid main\n' \
+            > /etc/apt/sources.list.d/metasploit-framework.list
+        if apt-get update -qq >>"$LOG" 2>&1; then
+            if apt-get install $APT_OPTS metasploit-framework >>"$LOG" 2>&1; then
+                say "  ✓ metasploit-framework installed"
+                RESULTS="${RESULTS}metasploit=installed\n"
+            else
+                say "  ✗ metasploit-framework could not be installed"
+                RESULTS="${RESULTS}metasploit=failed\n"
+            fi
+        else
+            say "  ✗ apt-get update failed after adding Rapid7's repository"
+            RESULTS="${RESULTS}metasploit=update-failed\n"
+        fi
+    else
+        say "  ✗ could not install the repository key (gpg missing?)"
+        RESULTS="${RESULTS}metasploit=key-failed\n"
+    fi
+else
+    say "  ✗ could not download Rapid7's key (offline?)"
+    RESULTS="${RESULTS}metasploit=unreachable\n"
+fi
+rm -f /tmp/msf.key
+
+# ---- 3. radare2: try the archive first, then say so plainly -----------------
+say "» radare2: checking the configured archive"
+if apt-get install $APT_OPTS radare2 >>"$LOG" 2>&1; then
+    say "  ✓ radare2 installed"
+    RESULTS="${RESULTS}radare2=installed\n"
+else
+    say "  · radare2 is not packaged for this Debian release — skipped (rizin/ghidra cover the same ground)"
+    RESULTS="${RESULTS}radare2=not-packaged\n"
+fi
+
+# ---- report -----------------------------------------------------------------
+apt-get clean >/dev/null 2>&1 || true
+{
+    echo "THADD OS third-party toolchain"
+    echo "=============================="
+    printf '%b' "$RESULTS" | sed 's/^/  /'
+    echo "  (details: /var/log/thadd/thirdparty.log)"
+} > /usr/share/thadd/thirdparty-report.txt 2>/dev/null || true
+printf '%b' "$RESULTS" | sed 's/^/  /'
+
+echo "✓ third-party toolchain step finished (see /usr/share/thadd/thirdparty-report.txt)"
+exit 0

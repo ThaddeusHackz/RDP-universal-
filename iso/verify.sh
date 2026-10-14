@@ -186,6 +186,21 @@ in_squashfs() { # in_squashfs <path-in-image>
     END { exit(found ? 0 : 1) }' "$SQ_LIST"
 }
 
+need_any() { # need_any <human name> <hard|soft> <path>...
+  local name="$1" level="$2"; shift 2
+  local found="" path
+  for path in "$@"; do
+    if in_squashfs "$path"; then found="$path"; break; fi
+  done
+  if [[ -n "$found" ]]; then
+    pass "$name  ($found)"
+  elif [[ "$level" == hard ]]; then
+    fail "$name MISSING (looked in: $*)"
+  else
+    warn "$name missing (looked in: $*)"
+  fi
+}
+
 need_file() { # need_file <path-in-image> <human name> <hard|soft>
   in_squashfs "$1"
   case $? in
@@ -257,10 +272,17 @@ head1 "optional package sets (what the tolerant installer did)"
 # the image is the only way to answer "did the security/dev/forensics/browser
 # sets actually install?" - and an earlier hook bug (only one of the six lists
 # was staged) left five of them skipped while the build looked perfectly fine.
-SETS_LOG="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe.log 2>/dev/null || true)"
+SETS_LOG="$(unsquashfs -cat "$SQ" usr/share/thadd/apt-safe-report.txt 2>/dev/null || true)"
+[[ -n "$SETS_LOG" ]] || SETS_LOG="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe.log 2>/dev/null || true)"
 EXPECTED_SETS=7
 if [[ -z "$SETS_LOG" ]]; then
-  warn "no /var/log/thadd/apt-safe.log inside the image — the optional sets never ran"
+  warn "the installer left no report in the image — the optional sets never ran (or its log was trimmed)"
+  # say what IS under the two places it should have written, so the next run does
+  # not have to guess between "never ran" and "log trimmed away"
+  for dir in usr/share/thadd var/log/thadd; do
+    entries="$(awk -v d="squashfs-root/$dir/" 'index($0, d) { n++ } END { print n+0 }' "$SQ_LIST" 2>/dev/null || echo 0)"
+    printf '  %s\n' "$dir holds ${entries:-0} entr(ies) in the image"
+  done
 else
   SETS_RUN="$(grep -c 'thadd-apt-safe: .* resolvable' <<<"$SETS_LOG" || true)"
   if (( SETS_RUN >= EXPECTED_SETS )); then
@@ -280,23 +302,49 @@ else
   fi
 fi
 SKIPPED="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe-skipped.txt 2>/dev/null || true)"
+[[ -n "$SKIPPED" ]] || SKIPPED="$(sed -n 's/^not in any configured repo (skipped): //p' <<<"$SETS_LOG" | tr ' ' '\n' | grep -v '^$' || true)"
 if [[ -n "$SKIPPED" ]]; then
   warn "$(grep -c . <<<"$SKIPPED") requested package(s) are not in this release's repos: $(tr '\n' ' ' <<<"$SKIPPED" | cut -c1-160)"
 fi
 FAILED_PKGS="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe-failed.txt 2>/dev/null || true)"
+[[ -n "$FAILED_PKGS" ]] || FAILED_PKGS="$(sed -n 's/^ *✗ \([^ ]*\).*/\1/p' <<<"$SETS_LOG" || true)"
 if [[ -n "$FAILED_PKGS" ]]; then
   warn "$(grep -c . <<<"$FAILED_PKGS") package(s) failed to install: $(tr '\n' ' ' <<<"$FAILED_PKGS" | cut -c1-160)"
+fi
+
+THIRD_PARTY="$(unsquashfs -cat "$SQ" usr/share/thadd/thirdparty-report.txt 2>/dev/null || true)"
+if [[ -n "$THIRD_PARTY" ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      *"=installed") pass "third-party: $(sed 's/^ *//' <<<"$line")" ;;
+      *"=not-packaged") warn "third-party: $(sed 's/^ *//' <<<"$line") (not in Debian, not installed)" ;;
+      *) [[ -n "${line// /}" ]] && warn "third-party: $(sed 's/^ *//' <<<"$line")" ;;
+    esac
+  done < <(grep -E '=' <<<"$THIRD_PARTY" || true)
+else
+  warn "no /usr/share/thadd/thirdparty-report.txt — the third-party tool step did not run"
 fi
 
 head1 "toolkit the user was promised"
 # Soft by design: a live image must be able to degrade (a package may be pulled
 # upstream between releases) - but the report should say exactly what is there.
-need_file usr/bin/msfconsole            "Metasploit (msfconsole)"     soft
+need_any  "Metasploit (msfconsole/msfvenom)" soft usr/bin/msfconsole usr/bin/msfvenom
+need_any  "impacket-scripts"              soft usr/bin/impacket-scripts usr/share/impacket
+need_any  "CrackMapExec"                  soft usr/bin/crackmapexec usr/bin/cme
+need_any  "bettercap"                     soft usr/bin/bettercap
+need_any  "mitmproxy"                     soft usr/bin/mitmproxy usr/bin/mitmweb
 need_file usr/bin/tshark                "Wireshark/tshark"            soft
-need_file usr/bin/radare2               "radare2"                     soft
-need_file usr/bin/john                  "John the Ripper"             soft
+need_any  "radare2 / rizin"               soft usr/bin/radare2 usr/bin/r2 usr/bin/rizin
+need_any  "John the Ripper"               soft usr/bin/john usr/sbin/john
+need_file usr/bin/nikto                  "nikto"                       soft
+need_file usr/bin/whatweb                "whatweb"                     soft
+need_file usr/bin/dirb                   "dirb"                        soft
+need_file usr/bin/ghidra                 "Ghidra"                      soft
 need_file usr/bin/hashcat               "hashcat"                     soft
-need_file usr/bin/sqlmap                "sqlmap"                      soft
+need_file usr/bin/sqlmap                 "sqlmap"                      soft
+need_file usr/bin/wfuzz                  "wfuzz"                       soft
+need_file usr/bin/binwalk                "binwalk"                     soft
+need_file usr/bin/fls                    "sleuthkit (fls)"             soft
 need_file usr/bin/hydra                 "hydra"                       soft
 need_file usr/bin/aircrack-ng           "aircrack-ng"                 soft
 need_file usr/bin/gobuster              "gobuster"                    soft
@@ -311,7 +359,7 @@ need_file usr/bin/nmap                  "nmap (security suite)"       soft
 # wrong, not degraded
 need_file usr/bin/git                   "git"                         hard
 need_file usr/bin/python3               "python3"                     hard
-need_file opt/microsoft/powershell/7/pwsh "PowerShell 7"              soft
+need_any  "PowerShell 7"                  soft opt/microsoft/powershell/7/pwsh usr/bin/pwsh
 need_file usr/bin/epiphany              "Epiphany browser"            soft
 need_file usr/bin/qutebrowser           "qutebrowser"                 soft
 need_file usr/bin/falkon                "Falkon browser"              soft

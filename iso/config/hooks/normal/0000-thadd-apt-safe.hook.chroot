@@ -44,6 +44,21 @@ for set in optional-firmware optional-extras optional-dev optional-security opti
     apt-get clean >/dev/null 2>&1 || true
 done
 
+# Keep a durable copy of the installer's report under /usr/share/thadd as well as
+# in /var/log: the verification step reads this out of the shipped squashfs to
+# prove what the sets did, and /var/log is the one tree a live image is free to
+# trim.  ("No log in the image" is indistinguishable from "the sets never ran".)
+mkdir -p /usr/share/thadd
+{
+    echo "THADD OS optional package sets"
+    echo "=============================="
+    for f in apt-safe.log apt-safe-skipped.txt apt-safe-failed.txt; do
+        [ -f "/var/log/thadd/$f" ] || continue
+        echo "--- $f ---"
+        cat "/var/log/thadd/$f"
+    done
+} > /usr/share/thadd/apt-safe-report.txt 2>/dev/null || true
+
 echo "—— optional sets: ${PROCESSED} processed${MISSING:+ · MISSING:${MISSING}}"
 if [ -n "$MISSING" ]; then
     echo "   (those lists were not staged — check iso/build.sh and iso/config/packages/)"
