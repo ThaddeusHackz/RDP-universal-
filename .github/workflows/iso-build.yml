@@ -79,8 +79,19 @@ jobs:
             echo "== ls iso =="
             ls -la iso/ 2>/dev/null | head -20
             echo
-            echo "== effective live-build config (iso/config/common) =="
-            grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|BOOTLOADERS|INITSYSTEM|DEBOOTSTRAP)=' iso/config/common 2>/dev/null || echo "(no config/common)"
+            # live-build spreads the effective configuration over five files
+            # (config/common, bootstrap, chroot, binary, source) and each one
+            # holds a different part of it - grep-ing only config/common is what
+            # made an earlier diagnosis guess at the wrong file, so dump them all.
+            for f in iso/config/common iso/config/bootstrap iso/config/chroot iso/config/binary iso/config/source; do
+              echo "== $f =="
+              grep -E '^[A-Za-z_]+=' "$f" 2>/dev/null || echo "(missing)"
+            done
+            echo "== did iso/auto/config run? =="
+            grep -nE 'auto/config|P: Creating config tree|P: Updating config tree' dist/desktop-build-trace.log 2>/dev/null | head -20 || true
+            echo "== what the staged lists ask for =="
+            wc -l iso/config/package-lists/*.list.chroot iso/config/packages/*.txt 2>/dev/null || true
+            grep -nE '^firmware' iso/config/package-lists/*.list.chroot iso/config/packages/*.txt 2>/dev/null || true
             for f in dist/build.log dist/desktop-build-trace.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
               [ -f "$f" ] || continue
               echo

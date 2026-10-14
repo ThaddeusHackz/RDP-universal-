@@ -143,16 +143,24 @@ find "$ISO_DIR/config/hooks" -name '*.hook.chroot' -exec chmod 0755 {} + 2>/dev/
 log "lb config"
 rm -rf config/binary config/chroot config/bootstrap config/common 2>/dev/null || true
 
-# Everything this image is (release, mirrors, archive areas, bootloaders, live
-# boot parameters, volume label) is declared once, in the repository's own
-# config/auto/config.  live-build 20230502 (Debian 12) does not reliably source
-# that file, and when it skips it, every option inside is silently lost: the run
-# that motivated this comment bootstrapped Debian 11 (20230502's default is
-# bullseye) with a main-only archive area, so it died on retired mirrors and on
-# firmware packages that live in non-free-firmware.  Running the auto script
-# explicitly puts its flags on the command line, the one input live-build always
-# honours (command line > environment > defaults); the exports below repeat the
-# release-critical ones as a second line of defence.
+# ---------------------------------------------------------------------------
+# 1a. The configuration lives in iso/auto/config - and its *location* is part
+#     of the contract: live-build reads ./auto/config from the build directory
+#     (lb_config(1), FILES).  It used to sit at iso/config/auto/config, one
+#     directory too deep, so live-build never read it and silently used its own
+#     defaults: the build bootstrapped Debian 11 (20230502's default suite) with
+#     a main-only archive area, and died an hour later on retired mirrors and on
+#     firmware packages that live in non-free-firmware.
+#
+#     The script is therefore run explicitly: its flags land on the command
+#     line, which is the one input live-build always honours (command line >
+#     environment > defaults).  The exports below repeat the release-critical
+#     settings as a second line of defence, and every one of them is verified in
+#     1c against the files `lb build` itself sources.
+# ---------------------------------------------------------------------------
+[[ -f auto/config ]] || die "iso/auto/config is missing - live-build would build with its own defaults"
+chmod +x auto/config 2>/dev/null || true
+
 export LB_DISTRIBUTION="bookworm"
 export LB_PARENT_DISTRIBUTION="bookworm"
 export LB_ARCHITECTURE="amd64"
@@ -164,12 +172,12 @@ export LB_MIRROR_BINARY="http://deb.debian.org/debian/"
 export LB_MIRROR_BINARY_SECURITY="http://security.debian.org/debian-security/"
 export LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"
 
-if ! sh config/auto/config; then
-  die "config/auto/config failed - the flags above are the fallback, but the repo's own configuration is authoritative"
+if ! ./auto/config; then
+  die "iso/auto/config failed (see its output above)"
 fi
-ok "iso/config/auto/config applied (command line, not left to the auto script)"
+ok "iso/auto/config applied (every flag on the lb config command line)"
 
-# 1a. Refuse to spend an hour bootstrapping the wrong release.
+# Refuse to spend an hour bootstrapping the wrong release.
 if grep -rqs "bullseye" config/ 2>/dev/null; then
   echo "  ✗ live-build still wants bullseye:" >&2
   grep -rn "bullseye" config/ 2>/dev/null | head -5 >&2
@@ -178,75 +186,74 @@ fi
 ok "suite is bookworm (live-build 20230502's default is bullseye - it is pinned here)"
 
 # ---------------------------------------------------------------------------
-# 1b. Trust nothing: print the configuration live-build actually kept, and pin
-#     the values that decide whether this is a bookworm image (a wrong suite or
-#     an obsolete security mirror is what turns a build into 404s at the very
-#     end, after an hour of work).
+# 1b. Trust nothing: pin the values that decide whether the build can succeed,
+#     then dump what live-build actually kept.  A wrong suite, an obsolete
+#     mirror or a main-only archive area only shows up at the very end of a
+#     45-minute build, so they are checked here - in seconds.
 # ---------------------------------------------------------------------------
-log "effective live-build configuration"
-for f in config/bootstrap config/common config/binary; do
-  [[ -f "$f" ]] || continue
-  echo "  --- $f"
-  grep -E '^LB_(DISTRIBUTION|PARENT_DISTRIBUTION|ARCHITECTURE|MIRROR_BOOTSTRAP|MIRROR_CHROOT|MIRROR_CHROOT_SECURITY|MIRROR_BINARY|MIRROR_BINARY_SECURITY|BINARY_IMAGE|DEBOOTSTRAP|BOOTLOADERS|INITSYSTEM)=' "$f" | sed 's/^/      /' || true
-done
+dump_config() {
+  local f
+  for f in config/common config/bootstrap config/chroot config/binary config/source; do
+    [[ -f "$f" ]] || continue
+    echo "  --- $f"
+    grep -E '^[A-Z_]+=' "$f" | sed 's/^/      /' || true
+  done
+}
 
-if [[ -f config/common ]]; then
-  force() { # force <VAR> <value>   - in every config file that declares it
-    local var="$1" val="$2" f
-    for f in config/bootstrap config/common config/binary; do
-      [[ -f "$f" ]] || continue
-      if grep -q "^$var=" "$f"; then
-        sed -i "s|^$var=.*|$var=\"$val\"|" "$f"
-      fi
-    done
-    # bootstrap needs the distribution even when it did not set one
-    if [[ "$var" == "LB_DISTRIBUTION" ]] && ! grep -q "^LB_DISTRIBUTION=" config/bootstrap 2>/dev/null; then
-      echo "$var=\"$val\"" >> config/bootstrap
+force() { # force <VAR> <value>   - rewrite it in every config file that declares it
+  local var="$1" val="$2" f
+  for f in config/bootstrap config/common config/chroot config/binary; do
+    [[ -f "$f" ]] || continue
+    if grep -q "^$var=" "$f"; then
+      sed -i "s|^$var=.*|$var=\"$val\"|" "$f"
     fi
-  }
+  done
+}
+
+if [[ -f config/bootstrap ]]; then
   force LB_DISTRIBUTION "bookworm"
   force LB_PARENT_DISTRIBUTION "bookworm"
   force LB_MIRROR_CHROOT "http://deb.debian.org/debian/"
   force LB_MIRROR_CHROOT_SECURITY "http://security.debian.org/debian-security/"
   force LB_MIRROR_BINARY "http://deb.debian.org/debian/"
   force LB_MIRROR_BINARY_SECURITY "http://security.debian.org/debian-security/"
-  ok "suite + mirrors pinned to bookworm (printed above, before the fix-up)"
-  log "after the fix-up"
-  for f in config/bootstrap config/common; do
-    [[ -f "$f" ]] || continue
-    echo "  --- $f"
-    grep -E '^LB_(DISTRIBUTION|MIRROR_BOOTSTRAP|MIRROR_CHROOT_SECURITY)=' "$f" | sed 's/^/      /' || true
-  done
-
-  # The two settings that killed the previous run: a main-only archive area
-  # (every firmware package unreachable) and a lost bootloader set (unbootable
-  # ISO).  Both are cheap to check here and expensive to discover an hour into
-  # `lb build`, so they are checked here.
-  bad_config=0
-  for want in 'LB_DISTRIBUTION=.*bookworm' 'LB_ARCHIVE_AREAS=.*non-free-firmware' \
-              'LB_BOOTLOADERS=.*grub-efi' 'LB_IMAGE_NAME=.*THADD-OS'; do
-    if grep -qE "$want" config/binary 2>/dev/null; then
-      ok "config/binary: $want"
-    else
-      echo "  ✗ config/binary does not carry: $want" >&2
-      bad_config=1
-    fi
-  done
-  if (( bad_config )); then
-    echo "  --- what live-build actually kept ---" >&2
-    grep -E '^LB_(DISTRIBUTION|ARCHIVE_AREAS|BOOTLOADERS|IMAGE_NAME|BOOTAPPEND|COMPRESSION|APT_OPTIONS|BINARY_IMAGE)=' config/binary >&2 || true
-    die "live-build kept the wrong configuration (see the dump above)"
-  fi
-  if grep -rqs "non-free-firmware" config/bootstrap config/common 2>/dev/null; then
-    ok "bootstrap/chroot archive areas include non-free-firmware"
-  else
-    echo "  ✗ the bootstrap stage has a main-only archive area:" >&2
-    grep -rn "ARCHIVE_AREAS" config/bootstrap config/common 2>/dev/null >&2 || true
-    die "non-free-firmware is not enabled for the chroot bootstrap (firmware packages would be unreachable)"
-  fi
+  force LB_MIRROR_BOOTSTRAP "http://deb.debian.org/debian/"
+  ok "suite + mirrors pinned to bookworm"
 else
-  warn "no config/common after lb config - live-build printed its own diagnostics above"
+  warn "no config/bootstrap after lb config - live-build printed its own diagnostics above"
 fi
+
+log "effective live-build configuration"
+dump_config
+
+# 1c. The release-critical settings, in the files lb build sources.
+bad_config=0
+require() { # require <file> <egrep-pattern> <description>
+  local file="$1" pat="$2" what="$3"
+  if grep -qE "$pat" "$file" 2>/dev/null; then
+    ok "$what"
+  else
+    printf '  ✗ %s does not carry: %s\n' "$file" "$pat" >&2
+    bad_config=1
+  fi
+}
+require config/bootstrap '^LB_DISTRIBUTION="bookworm"'                       "suite: bookworm"
+require config/bootstrap '^LB_ARCHIVE_AREAS=".*non-free-firmware'            "archive areas: main contrib non-free non-free-firmware"
+require config/bootstrap '^LB_PARENT_ARCHIVE_AREAS=".*non-free-firmware'     "bootstrap mirror archive areas: non-free-firmware"
+require config/bootstrap '^LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"' "bootstrap mirror reachable (deb.debian.org)"
+require config/binary  '^LB_BOOTLOADERS=".*grub-efi'                         "UEFI bootloader: grub-efi"
+require config/binary  '^LB_BOOTLOADERS=".*syslinux'                         "BIOS bootloader: syslinux"
+require config/binary  '^LB_BOOTAPPEND_LIVE=".*boot=live'                    "live boot parameters (boot=live ...)"
+require config/binary  '^LB_COMPRESSION="xz"'                                "squashfs compression: xz"
+require config/binary  '^LB_ISO_VOLUME="THADD_OS"'                           "ISO volume label: THADD_OS"
+require config/common  '^LB_IMAGE_NAME="THADD-OS'                            "image name: THADD-OS-<version>"
+require config/common  '^LB_INITSYSTEM="systemd"'                            "init system: systemd"
+if (( bad_config )); then
+  echo "  --- what live-build actually kept ---" >&2
+  dump_config >&2
+  die "live-build did not keep what iso/auto/config declares (dump above)"
+fi
+ok "every release-critical setting is in place (dump above)"
 
 log "lb build  (this is the long one — 15-45 min depending on cores/disk)"
 : > "$DIST_DIR/build.log"

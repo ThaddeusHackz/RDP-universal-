@@ -118,6 +118,7 @@ The repository does not trust the ISOs — it proves them, on every push:
 | The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
 | The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
 | The gallery and the demo video still render on a clean machine — at the full design size **and** down-scaled, so no scene can overflow its own window | `thadd-tests.yml` |
+| The desktop-ISO **build driver** runs against a stub live-build: the configuration in `iso/auto/config` is proven to reach `lb config`, and a wrong suite, a main-only archive area or a lost bootloader set is refused in seconds instead of after 45 minutes | `iso/tests/test_build_sh.py` |
 
 ![THADD OS desktop, captured over a real RDP session inside CI](ci/thadd-os-screenshot.jpg)
 
@@ -153,6 +154,7 @@ python3 -m thadd.server --host 0.0.0.0 --port 8080 --shell thadd/shell
 
 # the Debian-live desktop ISO (needs live-build/xorriso, ~20 min)
 sudo apt-get install live-build debootstrap xorriso squashfs-tools mtools dosfstools rsync
+sudo python3 iso/tests/test_build_sh.py                              # prove the driver first (~1 s)
 sudo ./iso/build.sh                                                  # -> dist/THADD-OS-*.iso
 
 # the media in this README

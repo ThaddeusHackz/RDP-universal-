@@ -1,7 +1,14 @@
 #!/bin/sh
 # =============================================================================
-#  THADD OS — live-build configuration
+#  THADD OS — live-build configuration (auto/config)
 #  Base: Debian 12 "bookworm" · amd64 · hybrid BIOS/UEFI live ISO
+#
+#  THIS FILE'S LOCATION IS PART OF ITS CONTRACT: live-build reads
+#  ./auto/config from the build directory (lb_config(1), FILES).  It lived
+#  one directory deeper (iso/config/auto/config) for a while, which is why
+#  an early desktop ISO was bootstrapped as Debian 11 with a main-only
+#  archive area: live-build never read it and used its own defaults.
+#  iso/build.sh runs it explicitly so the flags land on the command line.
 # =============================================================================
 set -e
 
@@ -46,7 +53,8 @@ lb config noauto \
     --iso-preparer "THADD OS build system <noreply@thadd.os>" \
     --uefi-secure-boot disable \
     --bootloaders "syslinux,grub-efi" \
-    --zsync false
+    --zsync false \
+    "${@}"
 
 # Profile-specific package list selection
 if [ "$PROFILE" = "minimal" ]; then

@@ -9,6 +9,7 @@ on:
     branches: [main, "arena/**"]
     paths:
       - "thadd/**"
+      - "iso/**"
       - ".github/workflows/thadd-tests.yml"
 
 permissions:
@@ -70,6 +71,9 @@ jobs:
 
       - name: Loader against both mock firmwares (filesystem and raw blocks)
         run: python3 thadd/boot/tests/run_loader_test.py
+
+      - name: ISO build driver (auto/config + the pre-flight guards)
+        run: sudo python3 iso/tests/test_build_sh.py
 
       - name: Render the desktop gallery and demo video
         env:
