@@ -111,6 +111,79 @@ STUB_UNSQUASHFS = r"""#!/bin/sh
 exit 1
 """
 
+# --- stubs for a healthy ISO, so the verifier itself is tested ---------------
+# The verifier has two ways to be wrong: refusing an image that is fine, and
+# accepting one that is broken.  These stubs emulate a healthy ISO (layout,
+# boot records, extractable files, branded squashfs) so the accepting path is
+# exercised too - refusing good builds is exactly what happened in CI.
+STUB_XORRISO_GOOD = r"""#!/bin/sh
+# `-indev X -report_el_torito plain` | `-find / -type f` | `-osirrox on -extract P DEST`
+ISO=""
+EXTRACT=""; DEST=""
+LIST=0; TORITO=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -indev) ISO="$2"; shift 2;;
+    -find) LIST=1; shift;;
+    -report_el_torito) TORITO=1; shift 2;;
+    -osirrox) shift 2;;
+    -extract) EXTRACT="$2"; DEST="$3"; shift 3;;
+    -type|-exec|--|plain) shift;;
+    *) shift;;
+  esac
+done
+if [ -n "$EXTRACT" ]; then
+  [ -n "$DEST" ] || exit 1
+  mkdir -p "$(dirname "$DEST")" 2>/dev/null
+  case "$EXTRACT" in
+    /live/filesystem.squashfs) dd if=/dev/zero of="$DEST" bs=1024 count=512 status=none;;
+    *) printf 'THADD-STUB:%s\n' "$EXTRACT" > "$DEST";;
+  esac
+  [ -s "$DEST" ] || exit 1
+  exit 0
+fi
+if [ "$TORITO" = 1 ]; then
+  echo "xorriso : NOTE : El Torito boot catalog found"
+  echo "El Torito catalog  -  2 images  1 cat"
+  echo "El Torito boot img : 1  BIOS  y  img : isolinux/isolinux.bin"
+  echo "El Torito boot img : 2  UEFI  y  img : boot/grub/efi.img"
+  exit 0
+fi
+if [ "$LIST" = 1 ]; then
+  for f in /live/filesystem.squashfs /live/vmlinuz /live/initrd.img \
+           /isolinux/isolinux.bin /isolinux/syslinux.cfg /isolinux/isohdpfx.bin \
+           /boot/grub/efi.img; do echo "$f"; done
+  exit 0
+fi
+exit 0
+"""
+
+STUB_UNSQUASHFS_GOOD = r"""#!/bin/sh
+# `-ll IMG PATH` (exists?) and `-cat IMG PATH` (contents)
+MODE="$1"; IMG="$2"; shift 2
+case "$MODE" in
+  -ll)
+    if [ "${1:-}" = "boot" ]; then
+      echo "drwxr-xr-x root/root 0 squashfs-root/boot"
+      echo "-rw-r--r-- root/root 16512872 squashfs-root/boot/vmlinuz-6.1.0-53-amd64"
+      echo "-rw-r--r-- root/root 57010176 squashfs-root/boot/initrd.img-6.1.0-53-amd64"
+    fi
+    exit 0
+    ;;
+  -cat)
+    case "${1:-}" in
+      usr/lib/os-release|etc/os-release)
+        echo 'PRETTY_NAME="THADD OS 1.0 (aurora)"'
+        echo 'ID=thadd'
+        exit 0
+        ;;
+    esac
+    exit 1
+    ;;
+esac
+exit 0
+"""
+
 CHECKS = 0
 FAILURES: list[str] = []
 
@@ -159,6 +232,12 @@ def main() -> int:
     verify_bin.mkdir()
     for name, body in (("xorriso", STUB_XORRISO), ("unsquashfs", STUB_UNSQUASHFS)):
         p = verify_bin / name
+        p.write_text(body)
+        p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    good_bin = tmp / "good-bin"
+    good_bin.mkdir()
+    for name, body in (("xorriso", STUB_XORRISO_GOOD), ("unsquashfs", STUB_UNSQUASHFS_GOOD)):
+        p = good_bin / name
         p.write_text(body)
         p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
@@ -246,6 +325,40 @@ def main() -> int:
         check("it ran the verifier", "verifying the ISO" in combined)
         check("it says the ISO did not pass verification", "did not pass verification" in combined,
               combined[-300:])
+        print("\n[5] a healthy ISO is recognised as shippable (the verifier itself)")
+        # A synthetic hybrid ISO: 300 MiB (a real desktop image is >250), the ISO
+        # 9660 primary volume descriptor at 0x8001, the MBR signature at 510, and
+        # a matching checksum sidecar.  xorriso/unsquashfs are stubbed to answer
+        # like a good image, so this asserts the *verifier's* verdict - it must
+        # not refuse an image that is fine (it did exactly that in CI once).
+        import hashlib
+
+        good_iso = REPO / "dist" / "GOOD-arena.iso"
+        good_iso.parent.mkdir(parents=True, exist_ok=True)
+        with open(good_iso, "wb") as fh:
+            fh.truncate(300 * 1024 * 1024)
+            fh.seek(32769); fh.write(b"CD001")
+            fh.seek(510);  fh.write(b"\x55\xaa")
+        digest = hashlib.sha256()
+        with open(good_iso, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+        (good_iso.parent / (good_iso.name + ".sha256")).write_text(
+            f"{digest.hexdigest()}  {good_iso.name}\n")
+
+        good_env = dict(env)
+        good_env["PATH"] = f"{good_bin}:{good_env['PATH']}"
+        proc = subprocess.run(["bash", str(ISO / "verify.sh"), str(good_iso)], cwd=str(REPO),
+                              env=good_env, capture_output=True, text=True, timeout=900)
+        out = proc.stdout + proc.stderr
+        check("the verifier accepts a good ISO", proc.returncode == 0,
+              f"rc={proc.returncode} :: " + " | ".join(l for l in out.splitlines() if "FAIL" in l)[:300])
+        check("it says RESULT: SHIPPABLE", "RESULT: SHIPPABLE" in out,
+              [l for l in out.splitlines() if "RESULT" in l])
+        check("with zero failures counted", " 0 failure(s)" in out,
+              [l for l in out.splitlines() if "verification:" in l])
+        check("and it checked the ISO layout, not just the contents",
+              "live/vmlinuz present" in out and "UEFI boot image present" in out)
     finally:
         AUTO.write_bytes(saved_auto)
         AUTO.chmod(stat.S_IMODE(saved_mode))

@@ -344,13 +344,20 @@ if [[ "${THADD_SKIP_VERIFY:-0}" == "1" ]]; then
   warn "THADD_SKIP_VERIFY=1 — not verifying the ISO"
 elif command -v xorriso >/dev/null 2>&1 && command -v unsquashfs >/dev/null 2>&1; then
   log "verifying the ISO (iso/verify.sh)"
+  VERIFY_LOG="$DIST_DIR/verify.log"
   set +e
-  bash "$ISO_DIR/verify.sh" "$ISO_OUT" 2>&1 | tee -a "$DIST_DIR/build.log"
-  VERIFY_RC="${PIPESTATUS[0]}"
+  bash "$ISO_DIR/verify.sh" "$ISO_OUT" > "$VERIFY_LOG" 2>&1
+  VERIFY_RC=$?
   set -e
+  cat "$VERIFY_LOG" >> "$DIST_DIR/build.log"
+  # The verdict line is checked as well as the exit status: a verifier that
+  # somehow returns 0 without saying SHIPPABLE is a broken gate, not a pass.
   if (( VERIFY_RC != 0 )); then
-    die "the ISO did not pass verification (exit $VERIFY_RC) — see dist/build.log; not publishing it"
+    tail -n 40 "$VERIFY_LOG" >&2
+    die "the ISO did not pass verification (exit $VERIFY_RC) — full log: dist/verify.log; not publishing it"
   fi
+  grep -q "RESULT: SHIPPABLE" "$VERIFY_LOG" \
+    || die "the verifier exited 0 but never reported RESULT: SHIPPABLE — not publishing it"
   ok "the ISO verifies: boot records, layout and shipped contents all check out"
 else
   warn "xorriso/unsquashfs are missing — the ISO was built but not verified"

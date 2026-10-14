@@ -49,8 +49,18 @@ else
 fi
 
 head1 "boot records (hybrid BIOS + UEFI)"
-if file "$ISO_PATH" | grep -qi 'ISO 9660'; then pass "ISO 9660 filesystem"; else fail "not an ISO 9660 image"; fi
-if file "$ISO_PATH" | grep -qiE 'DOS/MBR boot sector|hybrid'; then pass "MBR/El Torito boot sector present (BIOS boot)";
+# `file` gives the friendliest answer, but it is not installed everywhere - and a
+# missing `file` used to look exactly like a non-ISO image.  The bytes are the
+# truth: the ISO 9660 primary volume descriptor sits at 0x8001, and a bootable
+# disk (hybrid ISO) carries 0x55AA at offset 510.
+FILE_OUT="$(command -v file >/dev/null 2>&1 && file "$ISO_PATH" 2>/dev/null || true)"
+PVD="$(dd if="$ISO_PATH" bs=1 skip=32769 count=5 status=none 2>/dev/null || true)"
+if grep -qi 'ISO 9660' <<<"$FILE_OUT"; then pass "ISO 9660 filesystem (file: $(cut -d: -f2- <<<"$FILE_OUT" | cut -c2-60))";
+elif [[ "$PVD" == "CD001" ]]; then pass "ISO 9660 filesystem (volume descriptor at 0x8001)";
+else fail "not an ISO 9660 image (no CD001 volume descriptor)"; fi
+MBR_SIG="$(dd if="$ISO_PATH" bs=1 skip=510 count=2 status=none 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n' || true)"
+if grep -qiE 'DOS/MBR boot sector|hybrid' <<<"$FILE_OUT"; then pass "MBR/El Torito boot sector present (BIOS boot)";
+elif [[ "$MBR_SIG" == "55aa" ]]; then pass "MBR boot signature 0x55AA at offset 510 (hybrid ISO)";
 else warn "no MBR boot sector signature — BIOS/legacy boot may fail in VirtualBox"; fi
 
 command -v xorriso >/dev/null 2>&1 || { fail "xorriso missing (apt-get install xorriso)"; exit 1; }
@@ -61,35 +71,75 @@ grep -qiE 'BIOS|0x0 ' <<<"$BOOT_OUT" && pass "BIOS boot image referenced" || war
 grep -qiE 'EFI|efiboot' <<<"$BOOT_OUT" && pass "EFI boot image referenced (UEFI boot)" || warn "no EFI boot image — UEFI boot may fail"
 
 head1 "image layout"
+# Two ways of asking whether a file is on the ISO, because no single one is
+# trustworthy across xorriso versions:
+#   * `-find / -type f` prints the tree on some builds and nothing at all on
+#     others (an empty listing made every layout check fail on a perfectly good
+#     ISO - the failure that hid in this pipeline for two runs);
+#   * `-osirrox on -extract` either produces the bytes or it does not, and it is
+#     the same call the squashfs extraction below depends on.
+# So: list for the report, and *probe* for the verdict.
 LIST="$(xorriso -indev "$ISO_PATH" -find / -type f 2>/dev/null || true)"
-for required in live/filesystem.squashfs live/vmlinuz live/initrd.img isolinux/isolinux.bin isolinux/syslinux.cfg; do
-  if grep -qx "/$required" <<<"$LIST"; then pass "$required present"
-  else
-    case "$required" in
-      isolinux/*) warn "$required missing — legacy BIOS boot degraded" ;;
-      *)          fail "$required MISSING — image is not bootable" ;;
-    esac
+if [[ -n "$LIST" ]]; then
+  printf '  %s\n' "$(wc -l <<<"$LIST") file(s) listed on the ISO"
+else
+  warn "xorriso -find listed nothing ($(xorriso --version 2>/dev/null | head -1)) — using extraction probes"
+fi
+
+ISO_PROBE_BYTES=""
+iso_file() { # iso_file <path-in-iso> -> 0 when the bytes really can be extracted
+  local dest="$WORK/probe.$$"
+  rm -f "$dest"
+  if xorriso -indev "$ISO_PATH" -osirrox on -extract "$1" "$dest" >/dev/null 2>&1 && [[ -s "$dest" ]]; then
+    ISO_PROBE_BYTES="$(stat -c%s "$dest" 2>/dev/null || echo '?')"
+    rm -f "$dest"
+    return 0
   fi
+  rm -f "$dest"
+  ISO_PROBE_BYTES=""
+  return 1
+}
+iso_has() { grep -qx "/$1" <<<"$LIST" || iso_file "/$1"; }
+
+# live/filesystem.squashfs is proven by the extraction in the next section (it is
+# 2 GB - no point pulling it twice).
+for required in live/vmlinuz live/initrd.img; do
+  if iso_has "$required"; then
+    pass "$required present (${ISO_PROBE_BYTES} bytes)"
+  else
+    fail "$required MISSING — image is not bootable"
+  fi
+done
+for optional in isolinux/isolinux.bin isolinux/syslinux.cfg; do
+  if iso_has "$optional"; then pass "$optional present (legacy BIOS boot)";
+  else warn "$optional missing — legacy BIOS boot degraded"; fi
 done
 
 # UEFI: live-build ships the EFI system partition as a FAT image (efi.img) or as
 # EFI/BOOT/BOOTX64.EFI on the ISO root, depending on version/bootloader choice.
-if grep -qE '^/(boot/grub/efi\.img|efi\.img|EFI/BOOT/BOOTX64\.EFI|EFI/boot/bootx64\.efi)$' <<<"$LIST"; then
-  pass "UEFI boot image present: $(grep -oE '(boot/grub/)?efi\.img|EFI/[Bb]oot/[Bb]ootx64\.efi' <<<"$LIST" | head -1)"
+EFI_FOUND=""
+for candidate in boot/grub/efi.img efi.img EFI/BOOT/BOOTX64.EFI EFI/boot/bootx64.efi; do
+  if iso_has "$candidate"; then EFI_FOUND="$candidate"; break; fi
+done
+if [[ -n "$EFI_FOUND" ]]; then
+  pass "UEFI boot image present: /$EFI_FOUND (${ISO_PROBE_BYTES} bytes)"
 else
   warn "no EFI boot image found — UEFI-only machines will not boot (BIOS still works)"
 fi
-if grep -qx "/isolinux/isohdpfx.bin" <<<"$LIST" || grep -qE '^/(isolinux|syslinux)/' <<<"$LIST"; then
-  pass "hybrid MBR boot files present"
+if iso_has "isolinux/isohdpfx.bin" || grep -qE '^/(isolinux|syslinux)/' <<<"$LIST"; then
+  pass "hybrid MBR boot files present (the ISO boots as a disk too)"
 fi
 
 head1 "ship contents (deeper look inside the squashfs)"
 SQ="$WORK/filesystem.squashfs"
 [[ -n "${THADD_VERIFY_KEEP:-}" ]] || true
 if xorriso -indev "$ISO_PATH" -osirrox on -extract /live/filesystem.squashfs "$SQ" >/dev/null 2>&1 && [[ -s "$SQ" ]]; then
-  pass "squashfs extracted ($(du -h "$SQ" | cut -f1))"
+  pass "live/filesystem.squashfs present and extractable ($(du -h "$SQ" | cut -f1))"
 else
-  fail "could not extract /live/filesystem.squashfs"; exit 1
+  fail "could not extract /live/filesystem.squashfs — the ISO has no root filesystem"
+  printf '\n%s═══ verification: %d failure(s), %d warning(s) ═══%s\n' "$C_A" "$FATAL" "$WARN" "$C_R"
+  printf '%s  RESULT: NOT SHIPPABLE%s\n' "$C_BAD" "$C_R"
+  exit 1
 fi
 command -v unsquashfs >/dev/null 2>&1 || { fail "unsquashfs missing (apt-get install squashfs-tools)"; exit 1; }
 

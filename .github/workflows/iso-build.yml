@@ -152,7 +152,24 @@ jobs:
           # space to unpack the squashfs: drop the chroot/binary/cache first.
           sudo rm -rf iso/cache iso/chroot iso/binary iso/.build iso/config/includes.chroot 2>/dev/null || true
           df -h / | tail -1
-          sudo bash ./iso/verify.sh 2>&1 | tee dist/verify.log
+          # NOT a pipeline: GitHub's default run shell is `bash -e` without
+          # pipefail, so `verify.sh | tee` returned tee's status and a verifier
+          # that printed "RESULT: NOT SHIPPABLE" still passed the step.  Capture
+          # the status explicitly, and require the verdict line as well - two
+          # independent guards so a broken ISO cannot pass by accident again.
+          set +e
+          sudo bash ./iso/verify.sh > dist/verify.log 2>&1
+          verify_rc=$?
+          set -e
+          sed 's/\x1b\[[0-9;]*m//g' dist/verify.log
+          if [ "$verify_rc" -ne 0 ]; then
+            echo "::error::iso/verify.sh refused the ISO (exit $verify_rc)"
+            exit "$verify_rc"
+          fi
+          grep -q "RESULT: SHIPPABLE" dist/verify.log || {
+            echo "::error::the verifier exited 0 but never said RESULT: SHIPPABLE"
+            exit 1
+          }
 
       - name: Keep the verification log
         if: always()
