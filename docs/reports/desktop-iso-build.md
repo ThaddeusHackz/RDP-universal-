@@ -1,24 +1,24 @@
 # THADD OS desktop ISO - live-build report
 
-- run: [38488668111](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38488668111)
-- commit: `88470ae727178f374e0b8cfd203df69264436136`
+- run: [38488626097](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38488626097)
+- commit: `d884f8faedbf4d0e26cead79692129275af9b29e`
 - result: **failed**
 
 ```
 == ls dist ==
 total 968
 drwxr-xr-x  2 runner runner   4096 Oct 14 00:11 .
-drwxr-xr-x 17 runner runner   4096 Oct 14 00:11 ..
--rw-r--r--  1 root   root   474504 Oct 14 00:16 build.log
--rw-r--r--  1 runner runner 507330 Oct 14 00:16 desktop-build-trace.log
+drwxr-xr-x 17 runner runner   4096 Oct 14 00:10 ..
+-rw-r--r--  1 root   root   474514 Oct 14 00:16 build.log
+-rw-r--r--  1 runner runner 507340 Oct 14 00:16 desktop-build-trace.log
 == ls iso ==
 total 96
 drwxr-xr-x  9 runner runner  4096 Oct 14 00:16 .
-drwxr-xr-x 17 runner runner  4096 Oct 14 00:11 ..
+drwxr-xr-x 17 runner runner  4096 Oct 14 00:10 ..
 drwxr-xr-x  2 root   root    4096 Oct 14 00:16 .build
 drwxr-xr-x  2 runner runner  4096 Oct 14 00:10 auto
 -rwxr-xr-x  1 runner runner 15156 Oct 14 00:10 build.sh
-drwxr-xr-x  6 root   root    4096 Oct 14 00:12 cache
+drwxr-xr-x  6 root   root    4096 Oct 14 00:11 cache
 drwxr-xr-x 18 root   root    4096 Oct 14 00:15 chroot
 -rw-r--r--  1 root   root   30062 Oct 14 00:15 chroot.packages.install
 drwxr-xr-x 21 runner runner  4096 Oct 14 00:11 config
@@ -162,13 +162,13 @@ iso/config/packages/optional-firmware.txt:18:firmware-brcm80211
 iso/config/packages/optional-firmware.txt:19:firmware-amd-graphics
 
 ===== dist/build.log (first 40 lines) =====
-[2026-10-14 00:11:20] lb build 
+[2026-10-14 00:11:00] lb build 
 P: live-build 20230502
 P: Building for a debian/bookworm/amd64 system
-[2026-10-14 00:11:20] lb bootstrap 
+[2026-10-14 00:11:00] lb bootstrap 
 P: Setting up clean exit handler
-[2026-10-14 00:11:20] lb bootstrap_cache restore
-[2026-10-14 00:11:20] lb bootstrap_debootstrap 
+[2026-10-14 00:11:00] lb bootstrap_cache restore
+[2026-10-14 00:11:00] lb bootstrap_debootstrap 
 P: Begin bootstrapping system...
 P: If the following stage fails, the most likely cause of the problem is with your mirror configuration or a caching proxy.
 P: Running debootstrap (download-only)...
@@ -299,9 +299,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
+sent 1,163,304 bytes  received 1,743 bytes  2,330,094.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:15:27] lb chroot_hooks 
+[2026-10-14 00:15:47] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
@@ -398,9 +398,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
+sent 1,163,304 bytes  received 1,743 bytes  2,330,094.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:15:27] lb chroot_hooks 
+[2026-10-14 00:15:47] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
@@ -459,9 +459,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
+sent 1,163,304 bytes  received 1,743 bytes  2,330,094.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:15:27] lb chroot_hooks 
+[2026-10-14 00:15:47] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
