@@ -123,8 +123,25 @@ try_pkg() { # try_pkg <package> <label>
     fi
 }
 
-say "» VS Code and Microsoft Edge (Microsoft's repository is already configured)"
-try_pkg code                 "VS Code"
+say "» VS Code and Microsoft Edge"
+# packages-microsoft-prod configures the *prod* repository (PowerShell, .NET) only:
+# the editor and the browser live in two further repositories, each of which needs
+# its own sources entry.  (This is why the first attempt at these two failed while
+# PowerShell installed: the key was there, the repositories were not.)
+if fetch "https://packages.microsoft.com/keys/microsoft.asc" /tmp/ms.asc; then
+    gpg --dearmor < /tmp/ms.asc > /usr/share/keyrings/microsoft.gpg 2>>"$LOG" || true
+    rm -f /tmp/ms.asc
+fi
+if [ -s /usr/share/keyrings/microsoft.gpg ]; then
+    printf 'deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main\n' \
+        > /etc/apt/sources.list.d/vscode.list
+    printf 'deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/edge stable main\n' \
+        > /etc/apt/sources.list.d/microsoft-edge.list
+    apt-get update -qq >>"$LOG" 2>&1 || say "  · apt-get update had errors (continuing)"
+else
+    say "  ✗ could not install Microsoft's signing key"
+fi
+try_pkg code                  "VS Code"
 try_pkg microsoft-edge-stable "Microsoft Edge"
 
 say "» Google Chrome (vendor .deb)"

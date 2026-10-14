@@ -4,7 +4,6 @@
 # --- VirtualBox / VMware / QEMU guests: makes the ISO "just work" in a VM ---
 virtualbox-guest-utils
 virtualbox-guest-x11
-virtualbox-guest-dkms
 open-vm-tools
 open-vm-tools-desktop
 spice-vdagent

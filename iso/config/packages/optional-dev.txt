@@ -133,8 +133,8 @@ php
 lua5.4
 lua5.3
 tcl
-awk
-gawk
+mawk
+gmawk
 expect
 sqlite3
 postgresql-client
