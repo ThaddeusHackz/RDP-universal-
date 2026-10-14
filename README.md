@@ -24,10 +24,21 @@ workstation, a security lab, an AI operator and a forensics workbench — in one
 
 | Disc | What it is | Built by |
 | --- | --- | --- |
-| **`THADD-OS-1.0-x86_64.iso`** (56 MB) | The THADD live system: own boot chain, own userland, the THADD service (105 RPC methods), forensic engine, AI operator and the desktop shell. UEFI. | `thadd/boot/*` — pure Python, no xorriso/mtools/live-build |
-| **`THADD-OS-desktop-1.0-amd64.iso`** | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion, browsers, dev toolchain, security tools. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
+| **`THADD-OS-1.0-x86_64.iso`** (78 MB) | The THADD live system: own boot chain, own userland, the THADD service (105 RPC methods), forensic engine, AI operator and the desktop shell. UEFI. | `thadd/boot/*` — pure Python, no xorriso/mtools/live-build |
+| **`THADD-OS-<version>-aurora-amd64.iso`** (~2 GB) | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion, Firefox ESR + Chromium and the rest of the browser family, the dev toolchain, the Parrot/HTB-class security and forensics sets, plus the in-OS AI assistant and forensic scanner. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
 
-Both are attached to every [**Release**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases) by CI, which builds them from source on each run.
+Both are attached to every [**Release**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases)
+by CI, which builds them from source on every run. The desktop image is larger than GitHub's 2 GiB
+per-asset limit, so it ships as `*.part-00`, `*.part-01`, … plus a `parts.sha256` — rejoin it with:
+
+```bash
+cat THADD-OS-*-aurora-amd64.iso.part-* > thadd-os.iso
+sha256sum -c parts.sha256
+```
+
+**Use `v1.4` or newer.** Earlier releases were published while `iso/verify.sh` was broken — the file
+had lost its executable bit, CI skipped it, and the one run that did reach it had its verdict thrown
+away by a `tee` pipeline. They are marked as pre-releases and say so on the release page.
 
 ### Boot it in VirtualBox
 
@@ -119,6 +130,9 @@ The repository does not trust the ISOs — it proves them, on every push:
 | The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
 | The gallery and the demo video still render on a clean machine — at the full design size **and** down-scaled, so no scene can overflow its own window | `thadd-tests.yml` |
 | The desktop-ISO **build driver** runs against a stub live-build: the configuration in `iso/auto/config` is proven to reach `lb config`, and a wrong suite, a main-only archive area or a lost bootloader set is refused in seconds instead of after 45 minutes | `iso/tests/test_build_sh.py` |
+| The **finished desktop ISO is read back**: ISO 9660 + hybrid MBR + El Torito (BIOS **and** EFI) boot records, the ISO layout file by file, the squashfs inventory, and the contents the OS promises — THADD identity, the XFCE/`picom`/LightDM stack, `thadd-shell-session`, the AI agent loop and its tool registry, the DFIR engine, `thadd-scan`, browsers, the security toolchain, and the verdict of the image's **own** self-test. `0 failure(s)` or the build is not published | `iso/verify.sh` → `docs/reports/desktop-iso-verify.md` |
+| The image **tests itself from the inside** during the build (`42 passed · 0 failed` in the current release) and that verdict is read back out of the shipped squashfs | `desktop/thadd-desktop-selftest` → `/etc/thadd/selfcheck.txt` |
+| The verifier is tested in **both directions**: a broken ISO must be refused (and `build.sh` must die rather than publish it), and a healthy synthetic ISO must come back `RESULT: SHIPPABLE` | `iso/tests/test_build_sh.py` (56 checks) |
 
 ![THADD OS desktop, captured over a real RDP session inside CI](ci/thadd-os-screenshot.jpg)
 
@@ -131,11 +145,15 @@ firmwares that do **not** mount a CD's ISO 9660 volume, the loader reads the dis
 with its own ISO 9660 parser — fallback order: any SimpleFileSystem volume first, then raw blocks.
 Firmware 2 above is that exact scenario, tested on a real ISO built by the same code as the shipped one.
 
-**Honest limits.** No hypervisor exists on the build host, so the final firmware handover has not
-been executed in a real VM — the loader prints its state on screen precisely so a failure is
-diagnosable, and the mock firmware covers the handover contract. The live ISO ships the shell and
-tooling; the heavyweight desktop packages (full browsers, office, IDEs) come from the Debian-live
-ISO, which installs them from apt during its build.
+**Honest limits.** No hypervisor exists on the build host, so neither ISO has been *booted* here:
+the from-scratch loader is proven against two mock firmwares (the handover contract, byte-identical
+kernel/initramfs reads), and the desktop ISO is proven structurally — boot records, ISO layout,
+squashfs contents, kernel and initramfs — plus by the image's own self-test running inside its
+chroot during the build. Nothing in this repository claims an observed VirtualBox boot. The
+Debian-live desktop ISO carries the heavyweight stack (browsers, the security and dev sets, office,
+IDEs) because it installs them from apt during its build; that is also why it is ~2 GB and shipped
+in parts. Packages that have vanished from a Debian release are logged and skipped by
+`thadd-apt-safe` rather than failing the build — the verification report lists exactly which ones.
 
 ---
 

@@ -22,6 +22,7 @@ Exit:   0 when every check passes, 1 otherwise.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -159,15 +160,28 @@ exit 0
 """
 
 STUB_UNSQUASHFS_GOOD = r"""#!/bin/sh
-# `-ll IMG PATH` (exists?) and `-cat IMG PATH` (contents)
+# Models the REAL semantics of squashfs-tools, which are the reason the verifier
+# was rewritten: in `-ll IMG [PATH]` the extra argument is a *filter*, so a path
+# that does not exist produces no output and unsquashfs still exits 0.  The
+# verifier therefore reads one full inventory instead.
 MODE="$1"; IMG="$2"; shift 2
 case "$MODE" in
   -ll)
-    if [ "${1:-}" = "boot" ]; then
-      echo "drwxr-xr-x root/root 0 squashfs-root/boot"
-      echo "-rw-r--r-- root/root 16512872 squashfs-root/boot/vmlinuz-6.1.0-53-amd64"
-      echo "-rw-r--r-- root/root 57010176 squashfs-root/boot/initrd.img-6.1.0-53-amd64"
+    if [ -n "${THADD_STUB_INVENTORY:-}" ] && [ -r "$THADD_STUB_INVENTORY" ]; then
+      # full inventory (no path argument): dump it
+      if [ $# -eq 0 ]; then
+        cat "$THADD_STUB_INVENTORY"
+        exit 0
+      fi
+      # filtered listing: only matching entries, still exit 0 either way
+      for want in "$@"; do
+        grep -F "squashfs-root/$want" "$THADD_STUB_INVENTORY" || true
+      done
+      exit 0
     fi
+    echo "drwxr-xr-x root/root 0 squashfs-root/"
+    echo "-rw-r--r-- root/root 16512872 squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64"
+    echo "-rw-r--r-- root/root 57010176 squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64"
     exit 0
     ;;
   -cat)
@@ -181,6 +195,14 @@ case "$MODE" in
         echo "  PASS  desktop shell"
         echo "  31 passed · 0 failed · 9 warned"
         echo "  THADD desktop: OK"
+        exit 0
+        ;;
+      var/log/thadd/apt-safe.log)
+        for n in 10 105 203 164 176 64 10; do
+          echo "thadd-apt-safe: $n resolvable / $n requested"
+          echo "installing $n packages in one batch"
+          echo "batch install OK"
+        done
         exit 0
         ;;
     esac
@@ -352,11 +374,33 @@ def main() -> int:
         (good_iso.parent / (good_iso.name + ".sha256")).write_text(
             f"{digest.hexdigest()}  {good_iso.name}\n")
 
+        # The inventory the stub answers with is derived from what verify.sh
+        # actually demands - every `need_file <path>` in the script - minus
+        # Chromium, which is deliberately withheld to prove the inventory is
+        # consulted rather than assumed (a missing path must WARN, not PASS).
+        wanted = set()
+        for line in (ISO / "verify.sh").read_text().splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == "need_file":
+                wanted.add(parts[1])
+        withheld = "usr/bin/chromium"
+        wanted.discard(withheld)
+        inventory = tmp / "inventory.txt"
+        inventory.write_text("".join(
+            f"-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/{path}\n"
+            for path in sorted(wanted)
+        ) + "-rw-r--r-- root/root 16512872 2026-10-14 12:00 squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64\n"
+          + "-rw-r--r-- root/root 57010176 2026-10-14 12:00 squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64\n")
+
         good_env = dict(env)
         good_env["PATH"] = f"{good_bin}:{good_env['PATH']}"
+        good_env["THADD_STUB_INVENTORY"] = str(inventory)
         proc = subprocess.run(["bash", str(ISO / "verify.sh"), str(good_iso)], cwd=str(REPO),
                               env=good_env, capture_output=True, text=True, timeout=900)
         out = proc.stdout + proc.stderr
+        # the verifier colourises even when not on a tty, so strip escapes before
+        # matching on phrases that span a colour boundary ("PASS" + reset + " git")
+        out = re.sub(r"\x1b\[[0-9;]*m", "", out)
         check("the verifier accepts a good ISO", proc.returncode == 0,
               f"rc={proc.returncode} :: " + " | ".join(l for l in out.splitlines() if "FAIL" in l)[:300])
         check("it says RESULT: SHIPPABLE", "RESULT: SHIPPABLE" in out,
@@ -365,6 +409,17 @@ def main() -> int:
               [l for l in out.splitlines() if "verification:" in l])
         check("and it checked the ISO layout, not just the contents",
               "live/vmlinuz present" in out and "UEFI boot image present" in out)
+        check("it read a real squashfs inventory",
+              "squashfs inventory:" in out and "entries" in out,
+              [l for l in out.splitlines() if "inventory" in l])
+        check("a path missing from the inventory warns instead of passing",
+              "WARN Chromium binary missing" in out or "WARN" in out and "Chromium" in out,
+              [l for l in out.splitlines() if "Chromium" in l][:2])
+        check("everything present is still reported as present",
+              f"PASS git" in out and "PASS python3" in out)
+        check("the optional sets are reported from the image log",
+              "installer ran 7 optional" in out,
+              [l for l in out.splitlines() if "optional set" in l][:3])
     finally:
         AUTO.write_bytes(saved_auto)
         AUTO.chmod(stat.S_IMODE(saved_mode))

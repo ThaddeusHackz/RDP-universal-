@@ -14,7 +14,13 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ISO_PATH="${1:-$(ls -1t "$REPO_ROOT"/dist/*.iso 2>/dev/null | head -1 || true)}"
-WORK="$(mktemp -d /tmp/thadd-verify.XXXXXX)"
+# The workspace holds the extracted squashfs (2-6 GB), so it is configurable: CI
+# points it at a larger volume when the runner's root filesystem is tight.
+if [[ -n "${THADD_VERIFY_WORK:-}" ]]; then
+  mkdir -p "$THADD_VERIFY_WORK" && WORK="$THADD_VERIFY_WORK" || WORK="$(mktemp -d /tmp/thadd-verify.XXXXXX)"
+else
+  WORK="$(mktemp -d /tmp/thadd-verify.XXXXXX)"
+fi
 FATAL=0; WARN=0
 
 C_R=$'\033[0m'; C_OK=$'\033[38;5;42m'; C_BAD=$'\033[38;5;203m'; C_W=$'\033[38;5;214m'; C_A=$'\033[38;5;39m'
@@ -31,6 +37,7 @@ if [[ -z "$ISO_PATH" || ! -f "$ISO_PATH" ]]; then
   exit 1
 fi
 SIZE_BYTES=$(stat -c%s "$ISO_PATH"); SIZE_MB=$((SIZE_BYTES/1024/1024))
+printf '  workspace: %s\n  disk: %s\n' "$WORK" "$(df -h "$WORK" | tail -1 | tr -s ' ')"
 printf '  %s\n  %s MiB  ·  %s\n' "$ISO_PATH" "$SIZE_MB" "$(sha256sum "$ISO_PATH" | cut -c1-32)…"
 (( SIZE_MB >= 250 )) && pass "size is a plausible full desktop image (${SIZE_MB} MiB)" \
                      || fail "image is suspiciously small (${SIZE_MB} MiB) — packages likely missing"
@@ -153,13 +160,41 @@ else
   printf '%s  RESULT: NOT SHIPPABLE%s\n' "$C_BAD" "$C_R"
   exit 1
 fi
-command -v unsquashfs >/dev/null 2>&1 || { fail "unsquashfs missing (apt-get install squashfs-tools)"; exit 1; }
+command -v unsquashfs >/dev/null 2>&1 || { fail "unsquashfs missing (apt-get install squashfs-tools)" || true; exit 1; }
+
+# The contents of the image are checked against ONE inventory of the squashfs,
+# taken here.  The obvious alternative - `unsquashfs -ll "$SQ" <path>` per file -
+# is silently useless: in squashfs-tools' listing mode the extra argument is a
+# *filter*, not a file to stat, so a path that does not exist simply produces no
+# output and unsquashfs still exits 0.  Every "PASS" in an earlier report was
+# that: nmap was reported present on an image whose security package set had
+# never been installed.  A full listing cannot pass by accident: either the exact
+# entry is in it or it is not.
+SQ_LIST="$WORK/squashfs-inventory.txt"
+if ! unsquashfs -ll "$SQ" > "$SQ_LIST" 2>/dev/null; then
+  warn "could not list the squashfs (unsquashfs -ll failed) — falling back to extraction probes"
+  : > "$SQ_LIST"
+fi
+if [[ -s "$SQ_LIST" ]]; then
+  pass "squashfs inventory: $(wc -l < "$SQ_LIST") entries"
+fi
+
+in_squashfs() { # in_squashfs <path-in-image>
+  [[ -s "$SQ_LIST" ]] || return 2
+  awk -v want="$1" '
+    { for (i = 1; i <= NF; i++) { p = $i; sub(/^squashfs-root\//, "", p); sub(/^\.\//, "", p); if (p == want) found = 1 } }
+    END { exit(found ? 0 : 1) }' "$SQ_LIST"
+}
 
 need_file() { # need_file <path-in-image> <human name> <hard|soft>
-  if unsquashfs -ll "$SQ" "$1" >/dev/null 2>&1; then pass "$2  ($1)";
-  else
-    if [[ "$3" == hard ]]; then fail "$2 MISSING ($1)"; else warn "$2 missing ($1)"; fi
-  fi
+  in_squashfs "$1"
+  case $? in
+    0) pass "$2  ($1)" ;;
+    2) # no inventory: probe by extracting the bytes instead
+       if unsquashfs -cat "$SQ" "$1" >/dev/null 2>&1; then pass "$2  ($1)";
+       elif [[ "$3" == hard ]]; then fail "$2 MISSING ($1)"; else warn "$2 missing ($1)"; fi ;;
+    *) if [[ "$3" == hard ]]; then fail "$2 MISSING ($1)"; else warn "$2 missing ($1)"; fi ;;
+  esac
 }
 need_file etc/os-release                 "THADD identity"            hard
 need_file etc/lsb-release                "LSB identity"              soft
@@ -182,11 +217,7 @@ need_file opt/thadd/app/thadd/forensics/triage.py "DFIR triage engine" hard
 need_file opt/thadd/security/thadd-scan "THADD Scan engine"         hard
 need_file opt/thadd/tools/bin/thadd-apt-safe "tolerant package installer" soft
 need_file usr/share/applications/firefox-esr.desktop "Firefox browser"  soft
-need_file usr/bin/firefox-esr            "Firefox binary"            soft
 need_file usr/bin/chromium               "Chromium binary"           soft
-need_file usr/bin/nmap                   "nmap (security suite)"     soft
-need_file usr/bin/git                    "git"                       hard
-need_file usr/bin/python3                "python3"                   hard
 need_file usr/local/bin/rea              "REA reverse-engineering"   soft
 
 # Identity must literally say THADD OS.  /etc/os-release is a symlink to
@@ -221,13 +252,79 @@ else
   warn "in-image self-test output present but no verdict line: $(head -1 <<<"$SELFCHECK")"
 fi
 
-head1 "kernel + initramfs"
-if unsquashfs -ll "$SQ" "boot" >/dev/null 2>&1; then
-  K="$(unsquashfs -ll "$SQ" boot 2>/dev/null | awk '/vmlinuz/{print $NF}' | head -1)"
-  I="$(unsquashfs -ll "$SQ" boot 2>/dev/null | awk '/initrd/{print $NF}' | head -1)"
-  [[ -n "$K" ]] && pass "kernel present: ${K}" || warn "no vmlinuz inside squashfs (lives on ISO instead)"
-  [[ -n "$I" ]] && pass "initramfs present: ${I}" || warn "no initrd inside squashfs (lives on ISO instead)"
+head1 "optional package sets (what the tolerant installer did)"
+# thadd-apt-safe logs every run to /var/log/thadd/apt-safe.log.  Reading it out of
+# the image is the only way to answer "did the security/dev/forensics/browser
+# sets actually install?" - and an earlier hook bug (only one of the six lists
+# was staged) left five of them skipped while the build looked perfectly fine.
+SETS_LOG="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe.log 2>/dev/null || true)"
+EXPECTED_SETS=7
+if [[ -z "$SETS_LOG" ]]; then
+  warn "no /var/log/thadd/apt-safe.log inside the image — the optional sets never ran"
+else
+  SETS_RUN="$(grep -c 'thadd-apt-safe: .* resolvable' <<<"$SETS_LOG" || true)"
+  if (( SETS_RUN >= EXPECTED_SETS )); then
+    pass "installer ran $SETS_RUN optional set(s)"
+  elif (( SETS_RUN >= 4 )); then
+    warn "installer ran only $SETS_RUN of $EXPECTED_SETS optional sets — some packages are missing"
+  else
+    fail "installer ran only ${SETS_RUN:-0} of $EXPECTED_SETS optional sets — the image is missing whole tool groups"
+  fi
+  while IFS= read -r line; do pass "$line"; done \
+    < <(grep 'thadd-apt-safe: .* resolvable' <<<"$SETS_LOG" | sed 's/^ *//' | head -12)
+  if grep -q 'batch install OK' <<<"$SETS_LOG"; then
+    pass "at least one set installed in a single batch ($(grep -c 'batch install OK' <<<"$SETS_LOG") of $SETS_RUN)"
+  fi
+  if grep -q 'salvage' <<<"$SETS_LOG"; then
+    warn "a set needed the per-package salvage path ($(grep -c 'salvage complete' <<<"$SETS_LOG") set(s))"
+  fi
 fi
+SKIPPED="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe-skipped.txt 2>/dev/null || true)"
+if [[ -n "$SKIPPED" ]]; then
+  warn "$(grep -c . <<<"$SKIPPED") requested package(s) are not in this release's repos: $(tr '\n' ' ' <<<"$SKIPPED" | cut -c1-160)"
+fi
+FAILED_PKGS="$(unsquashfs -cat "$SQ" var/log/thadd/apt-safe-failed.txt 2>/dev/null || true)"
+if [[ -n "$FAILED_PKGS" ]]; then
+  warn "$(grep -c . <<<"$FAILED_PKGS") package(s) failed to install: $(tr '\n' ' ' <<<"$FAILED_PKGS" | cut -c1-160)"
+fi
+
+head1 "toolkit the user was promised"
+# Soft by design: a live image must be able to degrade (a package may be pulled
+# upstream between releases) - but the report should say exactly what is there.
+need_file usr/bin/msfconsole            "Metasploit (msfconsole)"     soft
+need_file usr/bin/tshark                "Wireshark/tshark"            soft
+need_file usr/bin/radare2               "radare2"                     soft
+need_file usr/bin/john                  "John the Ripper"             soft
+need_file usr/bin/hashcat               "hashcat"                     soft
+need_file usr/bin/sqlmap                "sqlmap"                      soft
+need_file usr/bin/hydra                 "hydra"                       soft
+need_file usr/bin/aircrack-ng           "aircrack-ng"                 soft
+need_file usr/bin/gobuster              "gobuster"                    soft
+need_file usr/bin/gdb                   "gdb"                         soft
+need_file usr/bin/strace                "strace"                      soft
+need_file usr/bin/tcpdump               "tcpdump"                     soft
+need_file usr/bin/gcc                   "gcc (C toolchain)"           soft
+need_file usr/bin/node                  "node"                        soft
+need_file usr/bin/ffmpeg                "ffmpeg"                      soft
+need_file usr/bin/nmap                  "nmap (security suite)"       soft
+# these two are in the mandatory core list: if they are missing, the image is
+# wrong, not degraded
+need_file usr/bin/git                   "git"                         hard
+need_file usr/bin/python3               "python3"                     hard
+need_file opt/microsoft/powershell/7/pwsh "PowerShell 7"              soft
+need_file usr/bin/epiphany              "Epiphany browser"            soft
+need_file usr/bin/qutebrowser           "qutebrowser"                 soft
+need_file usr/bin/falkon                "Falkon browser"              soft
+need_file usr/bin/w3m                   "w3m (text browser)"          soft
+need_file usr/bin/lynx                  "lynx (text browser)"         soft
+need_file usr/bin/torbrowser-launcher   "Tor Browser launcher"        soft
+need_file usr/share/applications/firefox-esr.desktop "Firefox ESR"     soft
+
+head1 "kernel + initramfs"
+K="$(awk '{ for (i = 1; i <= NF; i++) { p = $i; sub(/^squashfs-root\//, "", p); if (p ~ /^boot\/firmware\/vmlinuz-/ || p ~ /^boot\/vmlinuz-/) { print p; exit } } }' "$SQ_LIST" 2>/dev/null || true)"
+I="$(awk '{ for (i = 1; i <= NF; i++) { p = $i; sub(/^squashfs-root\//, "", p); if (p ~ /^boot\/firmware\/initrd/ || p ~ /^boot\/initrd/) { print p; exit } } }' "$SQ_LIST" 2>/dev/null || true)"
+[[ -n "$K" ]] && pass "kernel present: $K" || warn "no vmlinuz inside the squashfs (it lives on the ISO instead)"
+[[ -n "$I" ]] && pass "initramfs present: $I" || warn "no initrd inside the squashfs (it lives on the ISO instead)"
 
 printf '\n%s═══ verification: %d failure(s), %d warning(s) ═══%s\n' "$C_A" "$FATAL" "$WARN" "$C_R"
 if (( FATAL > 0 )); then

@@ -23,17 +23,34 @@ fi
 # them at runtime (useful for rescue/profile rebuilds).
 mkdir -p /usr/share/thadd/packages
 cp -f /opt/thadd/iso-packages/*.txt /usr/share/thadd/packages/ 2>/dev/null || true
-cp -f /usr/share/thadd/packages/optional-extras.txt /tmp/ 2>/dev/null || true
 
-for set in optional-firmware optional-extras optional-dev optional-security optional-forensics optional-desktop; do
-    f="/tmp/${set}.txt"
-    [ -f "$f" ] || continue
-    echo "» set: $set"
-    /usr/local/sbin/thadd-apt-safe "$f" || true
-    rm -f "$f"
+# Every set, in a deliberate order, and *all* of them: an earlier version copied
+# only optional-extras.txt into /tmp and then looked for the other five there, so
+# firmware, dev, security, forensics and desktop packages were skipped while the
+# hook still printed "✓ optional sets processed".  A set that cannot be found is
+# now reported loudly instead of being skipped in silence.
+PROCESSED=0
+MISSING=""
+for set in optional-firmware optional-extras optional-dev optional-security optional-forensics optional-desktop optional-browsers; do
+    src="/usr/share/thadd/packages/${set}.txt"
+    if [ ! -f "$src" ]; then
+        MISSING="${MISSING} ${set}"
+        continue
+    fi
+    echo "» set: $set ($(grep -cvE '^[[:space:]]*(#|$)' "$src") packages)"
+    /usr/local/sbin/thadd-apt-safe "$src" || true
+    PROCESSED=$((PROCESSED + 1))
     # keep the image from ballooning: drop downloaded debs between sets
     apt-get clean >/dev/null 2>&1 || true
 done
+
+echo "—— optional sets: ${PROCESSED} processed${MISSING:+ · MISSING:${MISSING}}"
+if [ -n "$MISSING" ]; then
+    echo "   (those lists were not staged — check iso/build.sh and iso/config/packages/)"
+fi
+if [ "$PROCESSED" -eq 0 ]; then
+    echo "✗ no optional package set was installed — the image has only the core lists"
+fi
 
 # Runtime lists stay available for on-demand re-install / audit
 cp -f /usr/share/thadd/packages/*.txt /root/ 2>/dev/null || true

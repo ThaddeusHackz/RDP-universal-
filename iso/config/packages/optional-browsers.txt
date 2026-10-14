@@ -1,0 +1,25 @@
+# =============================================================================
+#  THADD OS · optional-browsers
+# =============================================================================
+# "Firefox and all browsers installed" — Firefox ESR and Chromium are in the
+# mandatory desktop list (they must always be there); this set adds the rest of
+# the family, because different jobs need different engines: a Gecko browser, two
+# more WebKit/Blink ones, the Qt one, a text browser for a bare TTY, and Tor.
+#
+# Installed through thadd-apt-safe, so a browser that does not exist in this
+# release is logged and skipped rather than failing the build.
+# =============================================================================
+# WebKit / Blink family
+epiphany-browser            # GNOME Web (WebKitGTK)
+falkon                      # Qt WebEngine
+qutebrowser                 # Qt WebEngine, keyboard-driven (vim bindings)
+# Lightweight and terminal browsers (survive on a rescue image with no X)
+netsurf-gtk
+surf
+w3m
+lynx
+links2
+# Privacy / research
+torbrowser-launcher         # Tor Browser, verified download on first run
+# Bookmark import/export and profile tooling used by the shell's browser app
+xdg-utils

@@ -27,7 +27,11 @@ jobs:
   live-build:
     name: Build & verify desktop ISO
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # The full toolkit (dev, security, forensics, browsers, firmware) is ~700
+    # extra packages: downloading and unpacking them, then compressing a much
+    # larger squashfs, is where the wall-clock goes.  90 minutes was enough for
+    # the core image only.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -152,6 +156,13 @@ jobs:
           # space to unpack the squashfs: drop the chroot/binary/cache first.
           sudo rm -rf iso/cache iso/chroot iso/binary iso/.build iso/config/includes.chroot 2>/dev/null || true
           df -h / | tail -1
+          # the verifier unpacks the squashfs; put that on the roomier ephemeral
+          # disk when the runner has one
+          if [ -d /mnt ] && [ -w /mnt ]; then
+            sudo mkdir -p /mnt/thadd-verify && sudo chmod 777 /mnt/thadd-verify
+            export THADD_VERIFY_WORK=/mnt/thadd-verify
+          fi
+          df -h "${THADD_VERIFY_WORK:-/tmp}" | tail -1
           # NOT a pipeline: GitHub's default run shell is `bash -e` without
           # pipefail, so `verify.sh | tee` returned tee's status and a verifier
           # that printed "RESULT: NOT SHIPPABLE" still passed the step.  Capture
