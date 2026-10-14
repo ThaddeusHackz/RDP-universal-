@@ -1,8 +1,8 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38637952185](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38637952185)
-- commit: `f4b15ae29691c464844642654245661be66282a9`
-- verify step: **failure**
+- run: [38645556778](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38645556778)
+- commit: `e0d7ea5dcb981b663734b613dbe03a25e3f38135`
+- verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
 `iso/verify.sh` read the built ISO back: boot records, ISO layout, and the contents
@@ -11,10 +11,10 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.gy8G0i
+  workspace: /tmp/thadd-verify.TNiv3o
   disk: /dev/root 145G 70G 75G 49% /
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  5625 MiB  ·  6ece6afa84f0ca8dec4f38f774b21c85…
+  5625 MiB  ·  e08f3e6e2692b5bb5bd8bd95f1b4368f…
   ✓ PASS size is a plausible full desktop image (5625 MiB)
   ! WARN very large (5625 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
@@ -29,23 +29,20 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62686003 bytes)
+  ✓ PASS live/initrd.img present (62685993 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
 
 ── boot menus (what the firmware actually offers) ──
-  ! WARN no boot entries in the BIOS menu
+  menu source(s): isolinux/isolinux.cfg isolinux/menu.cfg isolinux/live.cfg isolinux/stdmenu.cfg
+  ✓ PASS 3 BIOS boot entr(ies) defined: mainmenu live-amd64 live-amd64-failsafe 
   ✓ PASS default entry: default vesamenu.c32
-  ✗ FAIL no boot=live in the BIOS menu — the image would boot without a live root
-  ✗ FAIL the BIOS menu never references vmlinuz
-  ✗ FAIL the BIOS menu never references initrd
+  ✓ PASS the live parameters are on the menu (boot=live)
+  ✓ PASS menu references vmlinuz: /live/vmlinuz
+  ✓ PASS menu references initrd: 	initrd
+/live/initrd.img
   ✓ PASS the UEFI/GRUB menu carries the live parameters too
-
-── documentation shipped with the image ──
-./iso/verify.sh: line 190: need_file: command not found
-./iso/verify.sh: line 190: need_file: command not found
-./iso/verify.sh: line 190: need_file: command not found
 
 ── ship contents (deeper look inside the squashfs) ──
   ✓ PASS live/filesystem.squashfs present and extractable (5.5G)
@@ -76,6 +73,11 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS os-release brands the system THADD OS
   ✓ PASS ID=thadd
   ✓ PASS in-image self-test: 46 passed · 0 failed · 0 warned
+
+── documentation shipped with the image ──
+  ✓ PASS documentation: SECURITY.md  (usr/share/doc/thadd/SECURITY.md)
+  ✓ PASS documentation: QUICKSTART.md  (usr/share/doc/thadd/QUICKSTART.md)
+  ✓ PASS documentation: AI.md  (usr/share/doc/thadd/AI.md)
 
 ── optional package sets (what the tolerant installer did) ──
   ✓ PASS installer ran 7 optional set(s)
@@ -144,6 +146,6 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS kernel present: boot/firmware/vmlinuz-6.1.0-53-amd64
   ✓ PASS initramfs present: boot/firmware/initrd.img-6.1.0-53-amd64
 
-═══ verification: 3 failure(s), 8 warning(s) ═══
-  RESULT: NOT SHIPPABLE
+═══ verification: 0 failure(s), 7 warning(s) ═══
+  RESULT: SHIPPABLE
 ```
