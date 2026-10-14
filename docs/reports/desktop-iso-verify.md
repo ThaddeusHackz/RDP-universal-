@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38596516279](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38596516279)
-- commit: `6d7b69ee98291db9da861a38365018dce3e43dec`
+- run: [38604974580](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38604974580)
+- commit: `d8df8fe322aaeed033ea474b26ef886a0b842286`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -11,12 +11,12 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.xkCrp2
-  disk: /dev/root 145G 68G 77G 47% /
+  workspace: /tmp/thadd-verify.rNxRdR
+  disk: /dev/root 145G 68G 77G 48% /
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  4379 MiB  ·  8df2b915d86ef0ae293df5793d36eb10…
-  ✓ PASS size is a plausible full desktop image (4379 MiB)
-  ! WARN very large (4379 MiB) — release will be split into parts
+  4773 MiB  ·  02a1b99eab589d33bf693b1b39a7c232…
+  ✓ PASS size is a plausible full desktop image (4773 MiB)
+  ! WARN very large (4773 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
 
 ── boot records (hybrid BIOS + UEFI) ──
@@ -29,14 +29,14 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62685998 bytes)
+  ✓ PASS live/initrd.img present (62685971 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
 
 ── ship contents (deeper look inside the squashfs) ──
-  ✓ PASS live/filesystem.squashfs present and extractable (4.2G)
-  ✓ PASS squashfs inventory: 533041 entries
+  ✓ PASS live/filesystem.squashfs present and extractable (4.6G)
+  ✓ PASS squashfs inventory: 584984 entries
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
@@ -62,18 +62,42 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS REA reverse-engineering  (usr/local/bin/rea)
   ✓ PASS os-release brands the system THADD OS
   ✓ PASS ID=thadd
-  ✓ PASS in-image self-test: 45 passed · 0 failed · 1 warned
+  ✓ PASS in-image self-test: 46 passed · 0 failed · 0 warned
 
 ── optional package sets (what the tolerant installer did) ──
-  ! WARN no /var/log/thadd/apt-safe.log inside the image — the optional sets never ran
+  ✓ PASS installer ran 7 optional set(s)
+  ✓ PASS thadd-apt-safe: 10 resolvable / 10 requested
+  ✓ PASS thadd-apt-safe: 80 resolvable / 105 requested
+  ✓ PASS thadd-apt-safe: 183 resolvable / 202 requested
+  ✓ PASS thadd-apt-safe: 95 resolvable / 159 requested
+  ✓ PASS thadd-apt-safe: 121 resolvable / 174 requested
+  ✓ PASS thadd-apt-safe: 58 resolvable / 64 requested
+  ✓ PASS thadd-apt-safe: 10 resolvable / 10 requested
+  ✓ PASS at least one set installed in a single batch (7 of 7)
+  ! WARN 167 requested package(s) are not in this release's repos: bluez-utils brave-browser cmusphinx-en-us-5.2 code code-insiders discord gir1.2-appindicator3-0.1 google-chrome-stable jetbrains-toolbox microsoft-edge-stable o
+  ! WARN third-party: ==============================
+  ✓ PASS third-party: powershell=installed
+  ✓ PASS third-party: metasploit=installed
+  ! WARN third-party: radare2=not-packaged (not in Debian, not installed)
 
 ── toolkit the user was promised ──
-  ! WARN Metasploit (msfconsole) missing (usr/bin/msfconsole)
+  ✓ PASS Metasploit (msfconsole/msfvenom)  (usr/bin/msfconsole)
+  ✓ PASS impacket-scripts  (usr/share/impacket)
+  ! WARN CrackMapExec missing (looked in: usr/bin/crackmapexec usr/bin/cme)
+  ✓ PASS bettercap  (usr/bin/bettercap)
+  ✓ PASS mitmproxy  (usr/bin/mitmproxy)
   ✓ PASS Wireshark/tshark  (usr/bin/tshark)
-  ! WARN radare2 missing (usr/bin/radare2)
-  ! WARN John the Ripper missing (usr/bin/john)
+  ! WARN radare2 / rizin missing (looked in: usr/bin/radare2 usr/bin/r2 usr/bin/rizin)
+  ✓ PASS John the Ripper  (usr/sbin/john)
+  ✓ PASS nikto  (usr/bin/nikto)
+  ✓ PASS whatweb  (usr/bin/whatweb)
+  ✓ PASS dirb  (usr/bin/dirb)
+  ! WARN Ghidra missing (usr/bin/ghidra)
   ✓ PASS hashcat  (usr/bin/hashcat)
   ✓ PASS sqlmap  (usr/bin/sqlmap)
+  ✓ PASS wfuzz  (usr/bin/wfuzz)
+  ✓ PASS binwalk  (usr/bin/binwalk)
+  ✓ PASS sleuthkit (fls)  (usr/bin/fls)
   ✓ PASS hydra  (usr/bin/hydra)
   ✓ PASS aircrack-ng  (usr/bin/aircrack-ng)
   ✓ PASS gobuster  (usr/bin/gobuster)
@@ -86,7 +110,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS nmap (security suite)  (usr/bin/nmap)
   ✓ PASS git  (usr/bin/git)
   ✓ PASS python3  (usr/bin/python3)
-  ! WARN PowerShell 7 missing (opt/microsoft/powershell/7/pwsh)
+  ✓ PASS PowerShell 7  (opt/microsoft/powershell/7/pwsh)
   ✓ PASS Epiphany browser  (usr/bin/epiphany)
   ✓ PASS qutebrowser  (usr/bin/qutebrowser)
   ✓ PASS Falkon browser  (usr/bin/falkon)
@@ -99,6 +123,6 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS kernel present: boot/firmware/vmlinuz-6.1.0-53-amd64
   ✓ PASS initramfs present: boot/firmware/initrd.img-6.1.0-53-amd64
 
-═══ verification: 0 failure(s), 6 warning(s) ═══
+═══ verification: 0 failure(s), 7 warning(s) ═══
   RESULT: SHIPPABLE
 ```
