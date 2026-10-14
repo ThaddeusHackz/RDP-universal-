@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38576308531](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38576308531)
-- commit: `b3986935dcca1c618c854da7feedbbff6feb149f`
+- run: [38580423384](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38580423384)
+- commit: `5544686c551e163c59d7125b9ebed5d1312320dc`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -12,28 +12,28 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── artefact ──
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  2042 MiB  ·  3a0a1845d139e23f8221f056d7d0fa9e…
+  2042 MiB  ·  4a1c943268999f06d2d94e7f9126ef55…
   ✓ PASS size is a plausible full desktop image (2042 MiB)
   ✓ PASS fits a DVD / release asset split threshold
   ✓ PASS sha256 sidecar verifies
 
 ── boot records (hybrid BIOS + UEFI) ──
-  ✓ PASS ISO 9660 filesystem
+  ✓ PASS ISO 9660 filesystem (file: ISO 9660 CD-ROM filesystem data (DOS/MBR boot sector) 'THAD)
   ✓ PASS MBR/El Torito boot sector present (BIOS boot)
   ✓ PASS El Torito boot catalog readable
   ✓ PASS BIOS boot image referenced
   ✓ PASS EFI boot image referenced (UEFI boot)
 
 ── image layout ──
-  ✗ FAIL live/filesystem.squashfs MISSING — image is not bootable
-  ✗ FAIL live/vmlinuz MISSING — image is not bootable
-  ✗ FAIL live/initrd.img MISSING — image is not bootable
-  ! WARN isolinux/isolinux.bin missing — legacy BIOS boot degraded
+  554 file(s) listed on the ISO
+  ✓ PASS live/vmlinuz present (8230848 bytes)
+  ✓ PASS live/initrd.img present (61583222 bytes)
+  ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ! WARN isolinux/syslinux.cfg missing — legacy BIOS boot degraded
-  ! WARN no EFI boot image found — UEFI-only machines will not boot (BIOS still works)
+  ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
 
 ── ship contents (deeper look inside the squashfs) ──
-  ✓ PASS squashfs extracted (2.0G)
+  ✓ PASS live/filesystem.squashfs present and extractable (2.0G)
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
@@ -68,6 +68,6 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS kernel present: squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64
   ✓ PASS initramfs present: squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64
 
-═══ verification: 3 failure(s), 3 warning(s) ═══
-  RESULT: NOT SHIPPABLE
+═══ verification: 0 failure(s), 1 warning(s) ═══
+  RESULT: SHIPPABLE
 ```
