@@ -85,6 +85,7 @@ fi
 
 head1 "ship contents (deeper look inside the squashfs)"
 SQ="$WORK/filesystem.squashfs"
+[[ -n "${THADD_VERIFY_KEEP:-}" ]] || true
 if xorriso -indev "$ISO_PATH" -osirrox on -extract /live/filesystem.squashfs "$SQ" >/dev/null 2>&1 && [[ -s "$SQ" ]]; then
   pass "squashfs extracted ($(du -h "$SQ" | cut -f1))"
 else
@@ -111,6 +112,13 @@ need_file usr/local/bin/thadd            "THADD control centre"      hard
 need_file usr/local/bin/thadd-ai         "THADD AI assistant"        hard
 need_file usr/local/bin/thadd-scan       "forensic scanner"          hard
 need_file usr/local/bin/thadd-desktop-selftest "in-image self-test"  hard
+need_file usr/local/bin/thadd-shell-session "THADD session (the desktop the user lands in)" hard
+need_file opt/thadd/desktop/index.html  "desktop shell entry"       hard
+need_file opt/thadd/app/thadd/server/ai/agent.py "AI agent loop"    hard
+need_file opt/thadd/app/thadd/server/ai/tools.py "AI tool registry" hard
+need_file opt/thadd/app/thadd/forensics/triage.py "DFIR triage engine" hard
+need_file opt/thadd/security/thadd-scan "THADD Scan engine"         hard
+need_file opt/thadd/tools/bin/thadd-apt-safe "tolerant package installer" soft
 need_file usr/share/applications/firefox-esr.desktop "Firefox browser"  soft
 need_file usr/bin/firefox-esr            "Firefox binary"            soft
 need_file usr/bin/chromium               "Chromium binary"           soft
@@ -119,12 +127,20 @@ need_file usr/bin/git                    "git"                       hard
 need_file usr/bin/python3                "python3"                   hard
 need_file usr/local/bin/rea              "REA reverse-engineering"   soft
 
-# identity must literally say THADD OS
-if OSR="$(unsquashfs -cat "$SQ" etc/os-release 2>/dev/null)"; then
+# Identity must literally say THADD OS.  /etc/os-release is a symlink to
+# ../usr/lib/os-release in this image, and `unsquashfs -cat` does not promise to
+# follow the final symlink, so try the real file first and the link second.
+OSR=""
+for candidate in usr/lib/os-release etc/os-release; do
+  text="$(unsquashfs -cat "$SQ" "$candidate" 2>/dev/null || true)"
+  if grep -q 'THADD OS' <<<"$text"; then OSR="$text"; break; fi
+  [[ -n "$text" ]] && OSR="$text"
+done
+if [[ -z "$OSR" ]]; then
+  fail "os-release unreadable inside the squashfs (tried usr/lib/os-release and etc/os-release)"
+else
   grep -q 'THADD OS' <<<"$OSR" && pass "os-release brands the system THADD OS" || fail "os-release does not say THADD OS"
   grep -q 'ID=thadd' <<<"$OSR" && pass "ID=thadd" || warn "ID=thadd missing"
-else
-  fail "os-release unreadable inside squashfs"
 fi
 
 head1 "kernel + initramfs"

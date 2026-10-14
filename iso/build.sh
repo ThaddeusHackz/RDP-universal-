@@ -136,8 +136,13 @@ check_overlay "etc/skel/.config" "the live user's desktop profile"
 check_overlay "usr/local/bin/thadd-shell-session" "the session launcher"
 check_overlay "opt/thadd/tools/bin/thadd-apt-safe" "the tolerant package installer"
 check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
+# desktop/shell.html loads dist/thadd-shell.js by name - if that bundle is ever
+# missing (it was dropped once by a snapshot that excludes dist/), the desktop
+# would start to a blank page with no error anywhere.  Fail the build instead.
+check_overlay "opt/thadd/desktop/dist/thadd-shell.js" "the bundled desktop shell"
 check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
 check_overlay "opt/thadd/security/thadd-scan" "the security suite"
+check_overlay "opt/thadd/desktop/thadd-desktop-selftest" "the desktop self-test"
 check_overlay "usr/local/bin/thadd-ai" "the AI assistant launcher"
 check_overlay "usr/local/bin/thadd-scan" "the forensic scanner launcher"
 check_overlay "opt/thadd/app/thadd/server/ai/cli.py" "the agent CLI"
@@ -325,6 +330,31 @@ ok "ISO: $(basename "$ISO_OUT")  (${SIZE_MB} MiB)"
 
 ( cd "$DIST_DIR" && sha256sum "$(basename "$ISO_OUT")" > "$(basename "$ISO_OUT").sha256" )
 ok "sha256 written"
+
+# ---------------------------------------------------------------------------
+# 3b. Prove the artefact before anyone can publish it
+# ---------------------------------------------------------------------------
+# The same verifier CI runs on the runner: it reads the boot records, walks the
+# ISO layout, unpacks the squashfs and asserts the shipped contents (identity,
+# desktop profile, session, assistant, scanner, toolchain).  Until now a green
+# build only proved that live-build exited 0 - it never proved the ISO was
+# bootable or that it contained the OS.  A build that cannot prove itself is not
+# a build we publish, so this dies rather than warn.
+if [[ "${THADD_SKIP_VERIFY:-0}" == "1" ]]; then
+  warn "THADD_SKIP_VERIFY=1 — not verifying the ISO"
+elif command -v xorriso >/dev/null 2>&1 && command -v unsquashfs >/dev/null 2>&1; then
+  log "verifying the ISO (iso/verify.sh)"
+  set +e
+  bash "$ISO_DIR/verify.sh" "$ISO_OUT" 2>&1 | tee -a "$DIST_DIR/build.log"
+  VERIFY_RC="${PIPESTATUS[0]}"
+  set -e
+  if (( VERIFY_RC != 0 )); then
+    die "the ISO did not pass verification (exit $VERIFY_RC) — see dist/build.log; not publishing it"
+  fi
+  ok "the ISO verifies: boot records, layout and shipped contents all check out"
+else
+  warn "xorriso/unsquashfs are missing — the ISO was built but not verified"
+fi
 
 # GitHub release assets are capped at 2 GiB — split so ANY build can ship.
 if (( SIZE_MB > 1900 )); then

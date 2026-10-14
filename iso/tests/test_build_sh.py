@@ -98,6 +98,19 @@ mkdir -p "$(dirname "$DEST")" 2>/dev/null || true
 cp -a "$SRC" "$DEST" 2>/dev/null || cp -a "$SRC/." "$DEST/" 2>/dev/null || true
 """
 
+# --- stubs for the verification gate -----------------------------------------
+# A real ISO gets verified by iso/verify.sh.  These stubs make the verifier fail
+# on the stub ISO (which is 2 MiB of zeros), so the test can prove that build.sh
+# refuses to publish an ISO that does not verify.
+STUB_XORRISO = r"""#!/bin/sh
+# no boot records, no squashfs: pretend the ISO is unreadable
+exit 0
+"""
+
+STUB_UNSQUASHFS = r"""#!/bin/sh
+exit 1
+"""
+
 CHECKS = 0
 FAILURES: list[str] = []
 
@@ -140,11 +153,21 @@ def main() -> int:
         p = stub_bin / name
         p.write_text(body)
         p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    # a second directory holding only the "verification fails" stubs, so the
+    # gate can be tested without lying about the other scenarios
+    verify_bin = tmp / "verify-bin"
+    verify_bin.mkdir()
+    for name, body in (("xorriso", STUB_XORRISO), ("unsquashfs", STUB_UNSQUASHFS)):
+        p = verify_bin / name
+        p.write_text(body)
+        p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
     env = dict(os.environ)
     env["PATH"] = f"{stub_bin}:{env.get('PATH', '')}"
     env["THADD_VERSION"] = "0.0-test"
     env["THADD_PROFILE"] = "desktop"
+    # the stub ISO is not a real image: iso/verify.sh would (correctly) refuse it
+    env["THADD_SKIP_VERIFY"] = "1"
 
     before = snapshot()
     saved_auto = AUTO.read_bytes()
@@ -165,14 +188,17 @@ def main() -> int:
                      "opt/thadd/ai/thadd-ai.py", "opt/thadd/security/thadd-scan",
                      "usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
                      "opt/thadd/app/thadd/server/ai/cli.py", "opt/thadd/app/thadd/server/ai/agent.py",
-                     "opt/thadd/app/thadd/forensics/triage.py"):
+                     "opt/thadd/app/thadd/forensics/triage.py",
+                     "opt/thadd/desktop/thadd-desktop-selftest",
+                     "opt/thadd/desktop/dist/thadd-shell.js"):
             check(f"overlay has /{want}", (overlay / want).exists())
         for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai",
                         "opt/thadd/app/thadd/thadd"):
             check(f"overlay is not nested at /{doubled}", not (overlay / doubled).exists())
         # the ISO's own commands have to be executable inside the image
         for tool in ("usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
-                     "opt/thadd/security/thadd-scan", "opt/thadd/tools/bin/thadd-apt-safe"):
+                     "opt/thadd/security/thadd-scan", "opt/thadd/tools/bin/thadd-apt-safe",
+                     "opt/thadd/desktop/thadd-desktop-selftest"):
             path = overlay / tool
             check(f"/{tool} is executable", path.exists() and os.access(path, os.X_OK))
 
@@ -184,6 +210,8 @@ def main() -> int:
         check("sha256 written", bool(list((REPO / "dist").glob("*.sha256"))))
         check("release notes written", (REPO / "dist" / "RELEASE-NOTES.md").is_file())
         check("the build log was kept", (REPO / "dist" / "build.log").is_file())
+        check("verification can be skipped explicitly (THADD_SKIP_VERIFY=1)",
+              "THADD_SKIP_VERIFY=1" in proc.stdout, proc.stdout[-300:])
         if proc.returncode != 0:
             print(proc.stdout[-2000:])
             print(proc.stderr[-2000:])
@@ -203,6 +231,21 @@ def main() -> int:
         check("build.sh exits non-zero", proc.returncode != 0, f"rc={proc.returncode}")
         check("it names the missing file", "iso/auto/config is missing" in proc.stdout + proc.stderr)
         check("it fails fast (no lb build)", "stub build finished" not in proc.stdout)
+
+        print("\n[4] an ISO that does not verify is refused, not published")
+        AUTO.write_bytes(saved_auto)
+        AUTO.chmod(0o755)
+        gated = dict(env)
+        gated.pop("THADD_SKIP_VERIFY", None)
+        gated["PATH"] = f"{verify_bin}:{gated['PATH']}"
+        proc = run_build(gated)
+        combined = proc.stdout + proc.stderr
+        check("build.sh exits non-zero", proc.returncode != 0, f"rc={proc.returncode}")
+        check("it built the ISO first (so the gate is what stopped it)",
+              "stub build finished" in proc.stdout)
+        check("it ran the verifier", "verifying the ISO" in combined)
+        check("it says the ISO did not pass verification", "did not pass verification" in combined,
+              combined[-300:])
     finally:
         AUTO.write_bytes(saved_auto)
         AUTO.chmod(stat.S_IMODE(saved_mode))

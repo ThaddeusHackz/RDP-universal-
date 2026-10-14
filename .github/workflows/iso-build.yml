@@ -49,19 +49,24 @@ jobs:
             -e THADD_PROFILE="${THADD_PROFILE:-desktop}" \
             -e THADD_VERSION="${THADD_VERSION:-}" \
             -e DEBIAN_FRONTEND=noninteractive \
+            -e THADD_SKIP_VERIFY=1 \
             debian:bookworm bash -c '
               echo "container: $( . /etc/os-release; echo $PRETTY_NAME ) / debian_version=$(cat /etc/debian_version)"
               apt-get update -qq && apt-get install -y -qq live-build debootstrap xorriso \
                 squashfs-tools mtools dosfstools rsync isolinux syslinux-common \
                 grub-efi-amd64-bin grub-pc-bin grub-common >/dev/null
               echo "live-build: $(lb --version | head -1)"; echo "live-build package: $(dpkg-query -W live-build 2>/dev/null)"
+              # The ISO is verified in its own step below, where the chroot has
+              # been deleted and there is room to unpack the squashfs.  Doing it
+              # here would need ~1.6 GB more disk than the runner has spare.
+              echo "in-build verification: ${THADD_SKIP_VERIFY:-0} (1 = the next step verifies instead)"
               bash -x ./iso/build.sh' 2>&1 | tee dist/desktop-build-trace.log
         # A failed desktop build must not stop the live ISO from being released
         # (thadd-iso.yml is what publishes that one).  When this fails, the log
         # tail below is the fastest way to see why in the Actions UI.
 
       - name: Build log (on failure) - committed so it is readable from anywhere
-        if: steps.build.outcome == 'failure'
+        if: steps.build.outcome == 'failure' || steps.verify.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -72,12 +77,19 @@ jobs:
             echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
             echo "- commit: \`${{ github.sha }}\`"
             echo "- result: **failed**"
+            echo "- build step: \`${{ steps.build.outcome }}\`  ·  verify step: \`${{ steps.verify.outcome }}\`"
             echo
             echo '```'
             echo "== ls dist =="
             ls -la dist/ 2>/dev/null || true
             echo "== ls iso =="
             ls -la iso/ 2>/dev/null | head -20
+            echo
+            echo "== verification (iso/verify.sh) =="
+            tail -n 80 dist/verify.log 2>/dev/null || echo "(no verify log written)"
+            echo
+            echo "== what the image ended up containing (if it got that far) =="
+            grep -E '^  (PASS|WARN) ' dist/verify.log 2>/dev/null | head -40 || true
             echo
             # live-build spreads the effective configuration over five files
             # (config/common, bootstrap, chroot, binary, source) and each one
@@ -128,8 +140,28 @@ jobs:
           done
 
       - name: Verify the ISO
+        id: verify
         run: |
-          if [ -x iso/verify.sh ]; then sudo ./iso/verify.sh; else echo "no verify.sh"; fi
+          # iso/verify.sh is committed executable; it is called through bash anyway
+          # so a checkout that lost the mode bit verifies instead of silently
+          # skipping (that is how three desktop ISOs shipped unverified: the step
+          # printed "no verify.sh" and passed).
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xorriso squashfs-tools file >/dev/null
+          # The build tree is not part of the artefact and the verifier needs the
+          # space to unpack the squashfs: drop the chroot/binary/cache first.
+          sudo rm -rf iso/cache iso/chroot iso/binary iso/.build iso/config/includes.chroot 2>/dev/null || true
+          df -h / | tail -1
+          sudo bash ./iso/verify.sh 2>&1 | tee dist/verify.log
+
+      - name: Keep the verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: THADD-OS-desktop-verify-log
+          path: dist/verify.log
+          if-no-files-found: warn
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         if: hashFiles('dist/*.iso') != ''

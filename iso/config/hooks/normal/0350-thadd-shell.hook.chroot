@@ -182,7 +182,6 @@ EOF
 fi
 
 # ---- 7. prove it, from inside the image ----------------------------------
-if [ -x "$D/dist/../thadd-desktop-selftest" ]; then :; fi
 cat > /usr/local/bin/thadd-shell-selftest <<'EOF'
 #!/bin/sh
 # Runs at image-build time: fail loudly here, never at boot on the user's screen.
