@@ -9,5 +9,8 @@
     "deep": "node deep.mjs",
     "test": "node bundle.mjs && node smoke.mjs && node deep.mjs"
   },
-  "devDependencies": { "esbuild": "^0.24.0", "jsdom": "^25.0.1" }
+  "devDependencies": {
+    "esbuild": "0.24.2",
+    "jsdom": "^25.0.1"
+  }
 }

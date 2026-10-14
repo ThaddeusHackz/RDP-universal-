@@ -138,6 +138,23 @@ if [ -n "$EXTRACT" ]; then
   mkdir -p "$(dirname "$DEST")" 2>/dev/null
   case "$EXTRACT" in
     /live/filesystem.squashfs) dd if=/dev/zero of="$DEST" bs=1024 count=512 status=none;;
+    /isolinux/isolinux.cfg|/isolinux/syslinux.cfg)
+      {
+        echo "default live"
+        echo "label live"
+        echo "  kernel /live/vmlinuz"
+        echo "  append initrd=/live/initrd.img boot=live components quiet splash"
+        echo "label safe"
+        echo "  kernel /live/vmlinuz"
+        echo "  append initrd=/live/initrd.img boot=live components nomodeset"
+      } > "$DEST";;
+    /boot/grub/grub.cfg)
+      {
+        echo "menuentry 'THADD OS live' {"
+        echo "  linux /live/vmlinuz boot=live components quiet splash"
+        echo "  initrd /live/initrd.img"
+        echo "}"
+      } > "$DEST";;
     *) printf 'THADD-STUB:%s\n' "$EXTRACT" > "$DEST";;
   esac
   [ -s "$DEST" ] || exit 1
@@ -152,8 +169,8 @@ if [ "$TORITO" = 1 ]; then
 fi
 if [ "$LIST" = 1 ]; then
   for f in /live/filesystem.squashfs /live/vmlinuz /live/initrd.img \
-           /isolinux/isolinux.bin /isolinux/syslinux.cfg /isolinux/isohdpfx.bin \
-           /boot/grub/efi.img; do echo "$f"; done
+           /isolinux/isolinux.bin /isolinux/isolinux.cfg /isolinux/isohdpfx.bin \
+           /boot/grub/efi.img /boot/grub/grub.cfg; do echo "$f"; done
   exit 0
 fi
 exit 0
@@ -308,7 +325,8 @@ def main() -> int:
                      "opt/thadd/app/thadd/server/ai/cli.py", "opt/thadd/app/thadd/server/ai/agent.py",
                      "opt/thadd/app/thadd/forensics/triage.py",
                      "opt/thadd/desktop/thadd-desktop-selftest",
-                     "opt/thadd/desktop/dist/thadd-shell.js"):
+                     "opt/thadd/desktop/dist/thadd-shell.js",
+                     "usr/share/doc/thadd/SECURITY.md"):
             check(f"overlay has /{want}", (overlay / want).exists())
         for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai",
                         "opt/thadd/app/thadd/thadd"):
@@ -431,6 +449,11 @@ def main() -> int:
               [l for l in out.splitlines() if "Chromium" in l][:2])
         check("everything present is still reported as present",
               f"PASS git" in out and "PASS python3" in out)
+        check("the BIOS boot menu is read and its live parameters checked",
+              "boot=live" in out and "BIOS boot entr" in out,
+              [l for l in out.splitlines() if "menu" in l][:3])
+        check("the UEFI menu is checked too", "GRUB menu carries the live parameters" in out,
+              [l for l in out.splitlines() if "GRUB" in l][:2])
         check("the optional sets are reported from the installer's own report",
               "installer ran 7 optional" in out,
               [l for l in out.splitlines() if "optional set" in l][:3])

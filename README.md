@@ -192,6 +192,16 @@ publishes the live ISO, [`iso-build.yml`](.github/workflows/iso-build.yml) build
 
 ---
 
+## 📚 Documentation
+
+Three guides ship inside the image (`/usr/share/doc/thadd/`) and live in `docs/`:
+
+| Guide | For |
+| --- | --- |
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | booting it in VirtualBox, logging in, the keyboard map, what is installed, what to do when a screen stays black |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | every control the image applies — sysctl, AppArmor, auditd, ufw, sshd-off, sudo logging, password quality — and how to inspect or undo each one |
+| [`docs/AI.md`](docs/AI.md) | the in-OS assistant: Groq/OpenAI-compatible/offline modes, the 35 tools, the approval gate and the audit log |
+
 ## 📂 Repository map
 
 ```

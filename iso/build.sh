@@ -102,6 +102,20 @@ stage() { # stage <src-relative-to-repo> <dest-in-image>
   ok "$1 -> /$2"
 }
 
+# The image's own pointers must not dangle: the login banner says "Docs:
+# /usr/share/doc/thadd/", and /etc/thadd/security-posture sends the reader to
+# /usr/share/doc/thadd/SECURITY.md.  Those files had never been staged, so every
+# pointer in every release went nowhere.
+if [[ -d "$REPO_ROOT/docs" ]]; then
+  mkdir -p "$OVERLAY/usr/share/doc/thadd"
+  cp -f "$REPO_ROOT"/docs/*.md "$OVERLAY/usr/share/doc/thadd/" 2>/dev/null || true
+  if [[ -f "$OVERLAY/usr/share/doc/thadd/SECURITY.md" ]]; then
+    ok "documentation -> /usr/share/doc/thadd ($(ls -1 "$OVERLAY/usr/share/doc/thadd" | wc -l) files)"
+  else
+    warn "no docs/*.md to stage — the image's documentation pointers will dangle"
+  fi
+fi
+
 # THADD identity + tooling
 stage os/etc      etc
 stage os/usr/local usr/local          # thadd-shell-session + /bridge server
@@ -142,6 +156,8 @@ check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
 check_overlay "opt/thadd/desktop/dist/thadd-shell.js" "the bundled desktop shell"
 check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
 check_overlay "opt/thadd/security/thadd-scan" "the security suite"
+check_overlay "usr/share/doc/thadd/SECURITY.md" "the security baseline docs"
+check_overlay "usr/share/doc/thadd/QUICKSTART.md" "the quick start docs"
 check_overlay "opt/thadd/desktop/thadd-desktop-selftest" "the desktop self-test"
 check_overlay "usr/local/bin/thadd-ai" "the AI assistant launcher"
 check_overlay "usr/local/bin/thadd-scan" "the forensic scanner launcher"

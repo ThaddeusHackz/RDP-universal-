@@ -149,6 +149,47 @@ elif grep -qE '^/(isolinux|syslinux)/' <<<"$LIST"; then
   pass "isolinux boot files present (the ISO also boots as a disk)"
 fi
 
+head1 "boot menus (what the firmware actually offers)"
+# The files being present is not the same as the menus being usable: a live ISO
+# whose isolinux.cfg points at a kernel that is not on the disc boots to a
+# prompt, and a menu without the live parameters boots to a kernel panic.  These
+# are the entries a VirtualBox user picks, so they are read and checked.
+ISO_CFG="$(xorriso -indev "$ISO_PATH" -osirrox on -extract /isolinux/isolinux.cfg "$WORK/isolinux.cfg" >/dev/null 2>&1 && cat "$WORK/isolinux.cfg" 2>/dev/null || true)"
+[[ -n "$ISO_CFG" ]] || ISO_CFG="$(xorriso -indev "$ISO_PATH" -osirrox on -extract /isolinux/syslinux.cfg "$WORK/isolinux.cfg" >/dev/null 2>&1 && cat "$WORK/isolinux.cfg" 2>/dev/null || true)"
+if [[ -z "$ISO_CFG" ]]; then
+  warn "no isolinux configuration on the ISO — the BIOS menu cannot be checked"
+else
+  menus_seen="$(grep -cE '^label ' <<<"$ISO_CFG" || true)"
+  (( menus_seen >= 1 )) && pass "$menus_seen BIOS boot entr(ies) defined" || warn "no boot entries in the BIOS menu"
+  grep -qE '^\s*default ' <<<"$ISO_CFG" && pass "default entry: $(grep -m1 -E '^\s*default ' <<<"$ISO_CFG" | tr -s ' ')"
+  if grep -q 'boot=live' <<<"$ISO_CFG"; then
+    pass "the live parameters are on the menu (boot=live)"
+  else
+    fail "no boot=live in the BIOS menu — the image would boot without a live root"
+  fi
+  for ref in vmlinuz initrd; do
+    if grep -q "$ref" <<<"$ISO_CFG"; then
+      pass "menu references $ref: $(grep -m1 -oE "[^ ]*${ref}[^ ]*" <<<"$ISO_CFG")"
+    else
+      fail "the BIOS menu never references $ref"
+    fi
+  done
+fi
+GRUB_CFG="$(xorriso -indev "$ISO_PATH" -osirrox on -extract /boot/grub/grub.cfg "$WORK/grub.cfg" >/dev/null 2>&1 && cat "$WORK/grub.cfg" 2>/dev/null || true)"
+if [[ -n "$GRUB_CFG" ]]; then
+  grep -q 'boot=live' <<<"$GRUB_CFG" && pass "the UEFI/GRUB menu carries the live parameters too" \
+                                      || warn "the GRUB menu does not mention boot=live"
+else
+  warn "no /boot/grub/grub.cfg on the ISO — UEFI boot is provided by the EFI image alone"
+fi
+
+head1 "documentation shipped with the image"
+# The login banner and /etc/thadd/security-posture point at these files; a pointer
+# to a missing file is worse than no pointer.
+for doc in SECURITY.md QUICKSTART.md AI.md; do
+  need_file "usr/share/doc/thadd/$doc" "documentation: $doc" soft
+done
+
 head1 "ship contents (deeper look inside the squashfs)"
 SQ="$WORK/filesystem.squashfs"
 [[ -n "${THADD_VERIFY_KEEP:-}" ]] || true
