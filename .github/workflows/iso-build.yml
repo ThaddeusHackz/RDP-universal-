@@ -163,6 +163,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Verification report (committed) - the proof travels with the repo
+        if: always() && steps.verify.outcome != 'skipped' && steps.verify.outcome != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Artifacts expire and job logs are awkward to read; this report is a
+          # commit, so "was this image actually verified?" stays answerable from
+          # the repository itself, for every run that reaches verification.
+          mkdir -p docs/reports
+          {
+            echo "# THADD OS desktop ISO - verification report"
+            echo
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- verify step: **${{ steps.verify.outcome }}**"
+            echo "- full log: artifact \`THADD-OS-desktop-verify-log\` (30 days) and \`dist/verify.log\`"
+            echo
+            echo "\`iso/verify.sh\` read the built ISO back: boot records, ISO layout, and the contents"
+            echo "of the shipped squashfs (identity, desktop profile, session, assistant, scanner, toolchain)."
+            echo
+            echo '```'
+            sed 's/\x1b\[[0-9;]*m//g' dist/verify.log 2>/dev/null | sed -n '1,220p' || echo "(no verify log)"
+            echo '```'
+          } > docs/reports/desktop-iso-verify.md
+          sed -n '1,12p' docs/reports/desktop-iso-verify.md
+          bash scripts/ci/publish-file.sh docs/reports/desktop-iso-verify.md \
+            "ci: desktop ISO verification report [skip ci]" || true
+
       - uses: actions/upload-artifact@v4
         if: hashFiles('dist/*.iso') != ''
         with:
