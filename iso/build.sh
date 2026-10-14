@@ -111,6 +111,12 @@ stage desktop  opt/thadd/desktop
 stage security opt/thadd/security
 stage tools    opt/thadd/tools
 stage reverse-engineering opt/thadd/reverse-engineering
+# The assistant and the DFIR engine are pure standard library, so the whole
+# stack rides along: /usr/local/bin/thadd-ai and thadd-scan are thin wrappers
+# around it (35 tools, no pip, no venv, works on a live ISO with no network).
+# NB: the destination keeps a `thadd/` level - rsync copies the *contents* of
+# the source, and python needs the package directory itself on PYTHONPATH.
+stage thadd    opt/thadd/app/thadd
 
 # The staged tree is what the hooks and the live session will read: check the
 # layout instead of trusting the copy (see the comment in stage()).
@@ -132,7 +138,14 @@ check_overlay "opt/thadd/tools/bin/thadd-apt-safe" "the tolerant package install
 check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
 check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
 check_overlay "opt/thadd/security/thadd-scan" "the security suite"
-for doubled in etc/skel/skel usr/local/local opt/thadd/tools/tools opt/thadd/ai/ai opt/thadd/desktop/desktop; do
+check_overlay "usr/local/bin/thadd-ai" "the AI assistant launcher"
+check_overlay "usr/local/bin/thadd-scan" "the forensic scanner launcher"
+check_overlay "opt/thadd/app/thadd/server/ai/cli.py" "the agent CLI"
+check_overlay "opt/thadd/app/thadd/server/ai/agent.py" "the agent loop"
+check_overlay "opt/thadd/app/thadd/server/ai/tools.py" "the agent tool registry"
+check_overlay "opt/thadd/app/thadd/forensics/triage.py" "the DFIR engine"
+for doubled in etc/skel/skel usr/local/local opt/thadd/tools/tools opt/thadd/ai/ai \
+                opt/thadd/desktop/desktop opt/thadd/app/thadd/thadd; do
   [[ -e "$OVERLAY/$doubled" ]] && die "the overlay is nested one level too deep: /$doubled exists (staging copied the directory instead of its contents)"
 done
 ok "overlay layout is correct (no nested copies)"

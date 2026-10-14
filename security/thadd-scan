@@ -1,3 +1,767 @@
-#!/usr/bin/env bash
-# THADD OS forensic scanner — placeholder
-echo "thadd-scan (build placeholder)"; exit 0
+#!/usr/bin/env python3
+"""THADD Scan — a forensic snapshot of the *running* system.
+
+`thadd-scan` answers the question a live machine actually asks: *what is on this
+box, and what changed?*  It reads only what the kernel already exposes — /proc,
+/etc, the package database — and writes an evidence report (Markdown + JSON)
+next to the scan:
+
+    thadd-scan                      # snapshot this system, save the report
+    thadd-scan --summary            # just the verdict lines
+    thadd-scan --json               # machine-readable
+    thadd-scan --quick              # skip the slow checks (dpkg --verify, deep walks)
+    thadd-scan --out /run/case-01   # where the report goes
+    thadd-scan --device /dev/sdX    # a *disk*, not the running system → THADD DFIR
+
+Nothing is modified and nothing is deleted: no mounts, no writes outside the
+report directory.  Disk-image work is handed to the THADD DFIR engine in
+``thadd.forensics`` (the same code path as ``thadd dfir /dev/sdX``).
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import pwd
+import re
+import shutil
+import socket
+import stat
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+VERSION = "1.0"
+HOME_DIRS = ("/root", "/home")
+SUSPICIOUS_PORTS = {1337, 31337, 4444, 5555, 6666, 6667, 9001, 12345, 33333, 54321}
+SUSPICIOUS_TEXT = re.compile(
+    r"(curl|wget)[^|;]{0,80}\|\s*(?:ba|z|da)?sh"          # pipe-to-shell droppers
+    r"|base64\s+-d\s*\|\s*(?:ba)?sh"
+    r"|/dev/tcp/"
+    r"|\bnc\b\s+-e\b|\bncat\b|\bsocat\b.*exec"
+    r"|chmod\s+[0-7]*[46][0-7]*\s+/"                       # made setuid/setgid
+    r"|python[0-9.]*\s+-c\s+['\"].*(socket|subprocess)"
+    r"|(?:^|[^\w])history\s+-c",
+    re.IGNORECASE,
+)
+VOLATILE_DIRS = ("/tmp", "/var/tmp", "/dev/shm")
+
+
+# --------------------------------------------------------------------------- model
+class Report:
+    def __init__(self) -> None:
+        self.started = time.time()
+        self.sections: list[dict] = []
+        self.findings: list[dict] = []
+        self.notes: list[str] = []
+        self.errors: list[str] = []
+        self.host = {
+            "hostname": socket.gethostname(),
+            "kernel": platform.release(),
+            "machine": platform.machine(),
+            "python": sys.version.split()[0],
+            "user": os.environ.get("USER") or pwd.getpwuid(os.geteuid()).pw_name,
+            "uid": os.geteuid(),
+            "root": os.geteuid() == 0,
+            "live": Path("/run/live").exists() or Path("/lib/live").exists(),
+            "scanner": f"thadd-scan {VERSION}",
+            "started": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        self.os_release = _read("/etc/os-release") or ""
+
+    # ---- recording ---------------------------------------------------------
+    def section(self, name: str, data) -> None:
+        self.sections.append({"name": name, "data": data})
+
+    def finding(self, severity: str, title: str, detail: str = "") -> None:
+        self.findings.append({"severity": severity, "title": title, "detail": detail})
+
+    def note(self, text: str) -> None:
+        self.notes.append(text)
+
+    def counts(self) -> dict:
+        out = {"high": 0, "medium": 0, "low": 0}
+        for f in self.findings:
+            out[f["severity"]] = out.get(f["severity"], 0) + 1
+        return out
+
+    def verdict(self) -> str:
+        c = self.counts()
+        if c["high"]:
+            return f"{c['high']} high-severity indicator(s)"
+        if c["medium"]:
+            return f"{c['medium']} medium-severity indicator(s)"
+        if c["low"]:
+            return "no high-severity indicators"
+        return "nothing unusual found"
+
+
+# ------------------------------------------------------------------------ helpers
+def _read(path: str, limit: int = 2_000_000) -> str:
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(limit).decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def _run(cmd: list[str], timeout: float = 15.0) -> tuple[int, str]:
+    exe = shutil.which(cmd[0])
+    if not exe:
+        return 127, ""
+    try:
+        proc = subprocess.run([exe, *cmd[1:]], capture_output=True, text=True, timeout=timeout)
+        return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+    except (subprocess.SubprocessError, OSError):
+        return 1, ""
+
+
+def _age_days(path: str) -> float:
+    try:
+        return (time.time() - os.stat(path).st_mtime) / 86400.0
+    except OSError:
+        return -1.0
+
+
+def _walk(root: str, limit: int = 4000, max_depth: int = 6):
+    root = root.rstrip("/") or "/"
+    base_depth = root.count("/")
+    seen = 0
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = [d for d in dirnames if d not in ("proc", "sys", "dev")]
+        if dirpath.count("/") - base_depth > max_depth:
+            dirnames.clear()
+            continue
+        for name in filenames:
+            seen += 1
+            if seen > limit:
+                return
+            yield os.path.join(dirpath, name)
+
+
+def _sha256(path: str, limit: int = 64 * 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as fh:
+            while chunk := fh.read(1 << 20):
+                h.update(chunk)
+                if fh.tell() > limit:
+                    return h.hexdigest() + " (truncated)"
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
+def _listen_addresses() -> list[dict]:
+    """Decode /proc/net/{tcp,tcp6,udp,udp6} into local/remote sockets."""
+    tcp_states = {"01": "ESTABLISHED", "02": "SYN_SENT", "06": "TIME_WAIT", "0A": "LISTEN",
+                  "08": "CLOSE_WAIT", "09": "LAST_ACK", "07": "CLOSE"}
+    out: list[dict] = []
+    for name, proto in (("tcp", "tcp"), ("tcp6", "tcp6"), ("udp", "udp"), ("udp6", "udp6")):
+        lines = _read(f"/proc/net/{name}").splitlines()[1:]
+        for line in lines:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            try:
+                local, remote, state = parts[1], parts[2], parts[3]
+                laddr, lport = _decode_sock(local, name.endswith("6"))
+                raddr, rport = _decode_sock(remote, name.endswith("6"))
+            except Exception:
+                continue
+            out.append({
+                "proto": proto,
+                "state": tcp_states.get(state, state),
+                "local": laddr, "port": lport,
+                "remote": raddr, "remote_port": rport,
+                "inode": parts[9] if len(parts) > 9 else "",
+            })
+    return out
+
+
+def _decode_sock(value: str, v6: bool) -> tuple[str, int]:
+    addr, _, port = value.partition(":")
+    port_i = int(port, 16)
+    if v6:
+        groups = [addr[i:i + 8] for i in range(0, 32, 8)]
+        words = [int(g, 16) for g in groups] if all(g for g in groups) else [0, 0, 0, 0]
+        packed = b"".join(int(w).to_bytes(4, "little") for w in words)
+        addr_s = socket.inet_ntop(socket.AF_INET6, packed)
+    else:
+        packed = int(addr, 16).to_bytes(4, "little")
+        addr_s = socket.inet_ntop(socket.AF_INET, packed)
+    return addr_s, port_i
+
+
+def _pid_info() -> list[dict]:
+    procs: list[dict] = []
+    for entry in sorted(os.listdir("/proc")):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        base = Path("/proc") / entry
+        cmdline = _read(str(base / "cmdline"), 8192).replace("\0", " ").strip()
+        stat_line = _read(str(base / "stat"), 4096)
+        comm = ""
+        m = re.match(r"\d+ \((.*)\) .", stat_line)
+        if m:
+            comm = m.group(1)
+        try:
+            exe = os.readlink(str(base / "exe"))
+        except OSError:
+            exe = ""
+        rss = 0
+        for line in _read(str(base / "status"), 8192).splitlines():
+            if line.startswith("VmRSS:"):
+                rss = int(re.sub(r"[^0-9]", "", line.split(":", 1)[1]) or 0)
+        procs.append({"pid": pid, "comm": comm, "exe": exe, "cmdline": cmdline[:400],
+                      "rss_kb": rss, "state": stat_line.split(") ", 1)[1].split()[0] if ") " in stat_line else "?"})
+    return procs
+
+
+# ---------------------------------------------------------------------- collectors
+def collect_identity(rep: Report) -> None:
+    osr = {}
+    for line in rep.os_release.splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            osr[k] = v.strip().strip('"')
+    uptime = _read("/proc/uptime").split()
+    boot = time.time() - float(uptime[0]) if uptime else 0
+    dmi = {}
+    for key in ("product_name", "sys_vendor", "board_name", "bios_version"):
+        dmi[key] = _read(f"/sys/class/dmi/id/{key}").strip()
+    rep.section("identity", {
+        "pretty_name": osr.get("PRETTY_NAME", ""),
+        "id": osr.get("ID", ""),
+        "version": osr.get("VERSION_ID", ""),
+        "kernel": platform.release(),
+        "boot_time": datetime.fromtimestamp(boot, timezone.utc).isoformat(timespec="seconds") if boot else "",
+        "uptime_hours": round((time.time() - boot) / 3600, 2) if boot else 0,
+        "virtualization": dmi,
+        "secure_boot": _read("/sys/kernel/security/lockdown").strip(),
+        "selinux": "enabled" if Path("/sys/fs/selinux/enforce").exists() else "n/a",
+        "apparmor": "enabled" if Path("/sys/module/apparmor/parameters/enabled").exists() else "n/a",
+    })
+    if not osr.get("PRETTY_NAME"):
+        rep.finding("low", "no os-release identity", "/etc/os-release is missing or empty")
+    if osr.get("HOME_URL") and "thadd" not in json.dumps(osr).lower():
+        pass  # generic distro is fine; THADD branding is checked by collect_thadd()
+
+
+def collect_accounts(rep: Report) -> None:
+    users: list[dict] = []
+    uid0: list[str] = []
+    for line in _read("/etc/passwd").splitlines():
+        parts = line.split(":")
+        if len(parts) < 7:
+            continue
+        name, _pw, uid, gid, gecos, home, shell = parts[:7]
+        entry = {"user": name, "uid": int(uid), "gid": int(gid), "home": home,
+                 "shell": shell, "login": shell not in ("/usr/sbin/nologin", "/bin/false", "/sbin/nologin")}
+        users.append(entry)
+        if entry["uid"] == 0 and name != "root":
+            uid0.append(name)
+    shadow: list[dict] = []
+    empty_pw: list[str] = []
+    for line in _read("/etc/shadow").splitlines():
+        parts = line.split(":")
+        if len(parts) < 2:
+            continue
+        name, pw = parts[0], parts[1]
+        shadow.append({"user": name, "state": ("empty" if pw == "" else
+                                               "locked" if pw.startswith(("!", "*")) else "hashed")})
+        if pw == "":
+            empty_pw.append(name)
+    sudo_members = []
+    for line in _read("/etc/group").splitlines():
+        parts = line.split(":")
+        if len(parts) >= 4 and parts[0] in ("sudo", "wheel", "admin", "adm"):
+            sudo_members.append({"group": parts[0], "members": [m for m in parts[3].split(",") if m]})
+    keys = []
+    for base in HOME_DIRS:
+        for home in _safe_listdir(base):
+            key = os.path.join(base, home, ".ssh", "authorized_keys")
+            if os.path.exists(key):
+                content = _read(key, 64_000)
+                keys.append({"path": key, "keys": sum(1 for l in content.splitlines() if l.strip() and not l.startswith("#")),
+                             "age_days": round(_age_days(key), 1),
+                             "sha256": hashlib.sha256(content.encode()).hexdigest()[:16]})
+    last = _run(["last", "-n", "25", "-w"])[1]
+    rep.section("accounts", {"users": users, "shadow": shadow, "privileged_groups": sudo_members,
+                             "authorized_keys": keys, "last_logins": last.strip().splitlines()[:25]})
+    if uid0:
+        rep.finding("high", "extra UID 0 account(s)", ", ".join(uid0))
+    if empty_pw:
+        rep.finding("high", "account(s) with an empty password", ", ".join(empty_pw))
+    fresh = [k for k in keys if 0 <= k["age_days"] <= 7]
+    if fresh:
+        rep.finding("medium", "authorized_keys written in the last week",
+                    ", ".join(f"{k['path']} ({k['age_days']}d)" for k in fresh))
+    rootshells = [u["user"] for u in users if u["uid"] < 1000 and u["login"]]
+    if len(rootshells) > 2:
+        rep.finding("low", "several system accounts have login shells", ", ".join(rootshells))
+
+
+def _safe_listdir(path: str) -> list[str]:
+    try:
+        return sorted(os.listdir(path))
+    except OSError:
+        return []
+
+
+def collect_processes(rep: Report) -> None:
+    procs = _pid_info()
+    deleted, volatile, hidden = [], [], []
+    for p in procs:
+        exe = p["exe"]
+        if exe.endswith(" (deleted)"):
+            deleted.append({"pid": p["pid"], "exe": exe, "cmd": p["cmdline"][:160]})
+        real = exe.split(" (deleted)")[0]
+        if real and any(real.startswith(d + "/") for d in VOLATILE_DIRS):
+            volatile.append({"pid": p["pid"], "exe": real, "cmd": p["cmdline"][:160]})
+        if p["comm"].startswith(".") or " " in p["comm"].strip("\n"):
+            hidden.append({"pid": p["pid"], "comm": p["comm"]})
+    heaviest = sorted(procs, key=lambda x: -x["rss_kb"])[:15]
+    rep.section("processes", {"count": len(procs),
+                              "heaviest": [{"pid": p["pid"], "comm": p["comm"], "rss_mb": round(p["rss_kb"] / 1024, 1),
+                                            "exe": p["exe"][:120]} for p in heaviest],
+                              "deleted_executables": deleted, "running_from_volatile": volatile,
+                              "odd_process_names": hidden})
+    if deleted:
+        rep.finding("high", "process(es) running a deleted executable",
+                    "; ".join(f"pid {d['pid']} {d['exe']}" for d in deleted[:6]))
+    if volatile:
+        rep.finding("high", "process(es) executing from {/tmp,/var/tmp,/dev/shm}",
+                    "; ".join(f"pid {v['pid']} {v['exe']}" for v in volatile[:6]))
+
+
+def collect_network(rep: Report) -> None:
+    socks = _listen_addresses()
+    listeners = [s for s in socks if s["state"] in ("LISTEN", "0A") or (s["proto"].startswith("udp") and s["port"])]
+    external = [s for s in listeners if s["local"] in ("0.0.0.0", "::")]
+    suspicious = [s for s in external if s["port"] in SUSPICIOUS_PORTS]
+    established = [s for s in socks if s["state"] == "ESTABLISHED"]
+    by_remote: dict[str, int] = {}
+    for s in established:
+        if s["remote"] not in ("0.0.0.0", "::"):
+            by_remote[s["remote"]] = by_remote.get(s["remote"], 0) + 1
+    fanout = {ip: n for ip, n in by_remote.items() if n >= 10}
+    ufw = _run(["ufw", "status"])[1].strip().splitlines()[:8]
+    nft = _run(["nft", "list", "ruleset"])[1]
+    ipt = _run(["iptables", "-S"])[1].strip().splitlines()[:40]
+    rep.section("network", {
+        "listeners": sorted(listeners, key=lambda s: (s["port"], s["proto"])),
+        "established": len(established),
+        "peers": sorted(by_remote.items(), key=lambda kv: -kv[1])[:15],
+        "firewall": {"ufw": ufw, "nftables_rules": len(nft.splitlines()), "iptables": ipt},
+        "resolv_conf": _read("/etc/resolv.conf").strip().splitlines()[:6],
+        "hosts": [l for l in _read("/etc/hosts").splitlines() if l.strip() and not l.startswith("#")][:15],
+        "dns_servers": [l.split()[1] for l in _read("/etc/resolv.conf").splitlines()
+                        if l.startswith("nameserver")][:6],
+    })
+    if suspicious:
+        rep.finding("high", "listener on a port common to backdoors",
+                    ", ".join(f"{s['local']}:{s['port']}/{s['proto']}" for s in suspicious))
+    if external:
+        rep.note(f"{len(external)} port(s) reachable from the network: "
+                 + ", ".join(f"{s['port']}/{s['proto']}" for s in external[:12]))
+    for ip, n in fanout.items():
+        rep.finding("medium", f"{n} simultaneous connections to {ip}", "possible beaconing or data transfer")
+
+
+def collect_persistence(rep: Report) -> None:
+    cron: list[dict] = []
+    for path in ["/etc/crontab", "/etc/anacrontab"] + [f"/etc/cron.d/{n}" for n in _safe_listdir("/etc/cron.d")]:
+        text = _read(path)
+        if text.strip():
+            cron.append({"path": path, "lines": [l for l in text.splitlines() if l.strip() and not l.strip().startswith("#")][:20]})
+    for base in "/var/spool/cron", "/var/spool/cron/crontabs":
+        for user in _safe_listdir(base):
+            text = _read(os.path.join(base, user))
+            if text.strip():
+                cron.append({"path": f"{base}/{user}", "lines": text.splitlines()[:20]})
+    autostart: list[str] = []
+    for base in HOME_DIRS:
+        for home in _safe_listdir(base):
+            adir = os.path.join(base, home, ".config", "autostart")
+            for entry in _safe_listdir(adir):
+                autostart.append(os.path.join(adir, entry))
+    units: list[str] = []
+    for root in ("/etc/systemd/system", "/run/systemd/system"):
+        for name in _safe_listdir(root):
+            if name.endswith(".wants"):
+                units += [f"{name}/{u}" for u in _safe_listdir(os.path.join(root, name))][:25]
+    preload = _read("/etc/ld.so.preload").strip()
+    rc_local = _read("/etc/rc.local").strip().splitlines()[:15]
+    preload_files = [p for p in (
+        "/etc/ld.so.preload", "/etc/ld.so.conf", "/etc/ld.so.conf.d") if os.path.exists(p)]
+    shell_suspicious: list[dict] = []
+    for base in HOME_DIRS:
+        for home in _safe_listdir(base):
+            for rc in (".bashrc", ".profile", ".bash_profile", ".zshrc"):
+                path = os.path.join(base, home, rc)
+                text = _read(path, 200_000)
+                for i, line in enumerate(text.splitlines(), 1):
+                    if line.strip().startswith("#"):
+                        continue
+                    if SUSPICIOUS_TEXT.search(line):
+                        shell_suspicious.append({"path": path, "line": i, "code": line.strip()[:200]})
+    rep.section("persistence", {"cron": cron, "user_autostart": autostart[:40],
+                                "systemd_wants_sample": units[:40], "ld_preload": preload,
+                                "loader_files": preload_files, "rc_local": rc_local,
+                                "suspicious_shell_lines": shell_suspicious,
+                                "at_jobs": _run(["atq"])[1].strip().splitlines()[:20]})
+    if preload:
+        rep.finding("high", "/etc/ld.so.preload is not empty", preload[:200])
+    for item in shell_suspicious:
+        rep.finding("medium", "shell profile runs a pipe-to-shell style command", f"{item['path']}:{item['line']} {item['code']}")
+    for job in cron:
+        for line in job["lines"]:
+            if SUSPICIOUS_TEXT.search(line):
+                rep.finding("high", "cron entry looks like a dropper", f"{job['path']}: {line[:180]}")
+
+
+def collect_permissions(rep: Report) -> None:
+    suid: list[dict] = []
+    world_writable: list[str] = []
+    roots = ("/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/bin", "/sbin", "/opt")
+    for root in roots:
+        for path in _walk(root, limit=6000, max_depth=4):
+            try:
+                st = os.lstat(path)
+            except OSError:
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            if st.st_mode & (stat.S_ISUID | stat.S_ISGID):
+                suid.append({"path": path, "mode": oct(st.st_mode & 0o7777),
+                             "owner": st.st_uid, "sha256": _sha256(path)})
+    for path in _walk("/etc", limit=3000, max_depth=4):
+        try:
+            st = os.lstat(path)
+        except OSError:
+            continue
+        if stat.S_ISREG(st.st_mode) and (st.st_mode & stat.S_IWOTH):
+            world_writable.append(path)
+    rep.section("permissions", {"suid_sgid": suid, "world_writable_in_etc": world_writable,
+                                "umask": oct(os.umask(0o022)), "suid_count": len(suid)})
+    os.umask(0o022)
+    for entry in suid:
+        if entry["owner"] != 0:
+            rep.finding("high", "setuid binary not owned by root", entry["path"])
+        elif any(entry["path"].startswith(p) for p in ("/tmp", "/home", "/var")):
+            rep.finding("high", "setuid binary in a user-writable tree", entry["path"])
+    if world_writable:
+        rep.finding("medium", "world-writable file(s) under /etc", ", ".join(world_writable[:8]))
+    if len(suid) > 60:
+        rep.finding("low", "unusually many setuid/setgid binaries", f"{len(suid)} found")
+
+
+def collect_integrity(rep: Report, quick: bool) -> None:
+    data: dict = {}
+    if not quick:
+        code, out = _run(["dpkg", "--verify"], timeout=90)
+        if code == 127:
+            data["package_db"] = "dpkg not present"
+        else:
+            bad = [l for l in out.splitlines() if l.strip()][:60]
+            data["package_db"] = {"verified": True, "changed_files": bad}
+            if bad:
+                rep.finding("medium", "package verification found changed files",
+                            f"{len(bad)} entry(ies): " + "; ".join(bad[:5]))
+    else:
+        data["package_db"] = "skipped (--quick)"
+    recent: list[dict] = []
+    cutoff = time.time() - 7 * 86400
+    for root in ("/etc", "/usr/local", "/opt"):
+        for path in _walk(root, limit=5000, max_depth=5):
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            if st.st_mtime >= cutoff:
+                recent.append({"path": path, "age_hours": round((time.time() - st.st_mtime) / 3600, 1)})
+    recent.sort(key=lambda x: x["age_hours"])
+    data["recent_in_system_dirs"] = recent[:40]
+    data["os_release_sha256"] = hashlib.sha256(rep.os_release.encode()).hexdigest()
+    rep.section("integrity", data)
+    if len(recent) > 25:
+        rep.finding("low", "many files changed in system directories this week", f"{len(recent)} in the last 7 days")
+
+
+def collect_volatile(rep: Report, quick: bool) -> None:
+    executables: list[dict] = []
+    for root in VOLATILE_DIRS:
+        for path in _walk(root, limit=2000, max_depth=4):
+            try:
+                st = os.lstat(path)
+            except OSError:
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            head = b""
+            try:
+                with open(path, "rb") as fh:
+                    head = fh.read(4)
+            except OSError:
+                pass
+            if st.st_mode & 0o111 or head == b"\x7fELF" or os.path.basename(path).startswith("."):
+                executables.append({"path": path, "size": st.st_size, "mode": oct(st.st_mode & 0o7777),
+                                    "elf": head == b"\x7fELF", "age_hours": round((time.time() - st.st_mtime) / 3600, 1)})
+    deleted_open: list[dict] = []
+    for entry in sorted(os.listdir("/proc")):
+        if not entry.isdigit():
+            continue
+        fd_dir = Path("/proc") / entry / "fd"
+        try:
+            fds = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = os.readlink(str(fd_dir / fd))
+            except OSError:
+                continue
+            if "(deleted)" in target:
+                deleted_open.append({"pid": int(entry), "fd": fd, "target": target})
+    history_hits: list[dict] = []
+    for base in HOME_DIRS:
+        for home in _safe_listdir(base):
+            for name in (".bash_history", ".zsh_history", ".python_history"):
+                path = os.path.join(base, home, name)
+                text = _read(path, 400_000)
+                for line in text.splitlines()[-300:]:
+                    if SUSPICIOUS_TEXT.search(line):
+                        history_hits.append({"path": path, "code": line.strip()[:200]})
+    auth_log = ""
+    for candidate in ("/var/log/auth.log", "/var/log/secure"):
+        if os.path.exists(candidate):
+            auth_log = _read(candidate, 400_000)
+            break
+    failed_logins = len(re.findall(r"Failed password|authentication failure", auth_log)) if auth_log else 0
+    rep.section("volatile", {"executables_in_volatile_dirs": executables,
+                             "deleted_open_files": deleted_open,
+                             "history_indicators": history_hits,
+                             "failed_logins_in_log": failed_logins,
+                             "journals": sorted(_safe_listdir("/var/log"))[:30]})
+    elf = [e for e in executables if e["elf"]]
+    if elf:
+        rep.finding("medium", "executable ELF file(s) in volatile directories",
+                    ", ".join(f"{e['path']} ({e['size']}B)" for e in elf[:6]))
+    if deleted_open:
+        rep.finding("medium", "deleted files still held open by a process",
+                    "; ".join(f"pid {d['pid']} {d['target']}" for d in deleted_open[:6]))
+    for hit in history_hits:
+        rep.finding("medium", "suspicious command in shell history", f"{hit['path']}: {hit['code']}")
+    if failed_logins > 20:
+        rep.finding("medium", f"{failed_logins} failed login attempts in the current log", auth_log[:0] or "")
+
+
+def collect_kernel(rep: Report) -> None:
+    tainted = _read("/proc/sys/kernel/tainted").strip() or "0"
+    modules = []
+    for line in _read("/proc/modules").splitlines():
+        parts = line.split()
+        if parts:
+            modules.append({"name": parts[0], "size": parts[1] if len(parts) > 1 else "",
+                            "used": parts[2] if len(parts) > 2 else "0"})
+    sysctl = {k: _read(f"/proc/sys/{k.replace('.', '/')}").strip()
+              for k in ("kernel.randomize_va_space", "kernel.kptr_restrict", "kernel.dmesg_restrict",
+                        "kernel.yama.ptrace_scope", "net.ipv4.tcp_syncookies",
+                        "kernel.unprivileged_bpf_disabled", "fs.protected_hardlinks",
+                        "fs.protected_symlinks", "net.ipv4.conf.all.rp_filter")}
+    rep.section("kernel", {"tainted": tainted, "modules_loaded": len(modules),
+                           "modules_sample": modules[:40], "sysctl": sysctl,
+                           "shadowing": _read("/proc/sys/kernel/modules_disabled").strip()})
+    if tainted not in ("0", ""):
+        rep.finding("medium", "kernel is tainted", f"/proc/sys/kernel/tainted={tainted} (see kernel docs for the bitmask)")
+    if sysctl.get("kernel.randomize_va_space") == "0":
+        rep.finding("medium", "ASLR is disabled", "kernel.randomize_va_space=0")
+    if sysctl.get("fs.protected_hardlinks") == "0" or sysctl.get("fs.protected_symlinks") == "0":
+        rep.finding("low", "kernel link protections disabled",
+                    f"hardlinks={sysctl.get('fs.protected_hardlinks')} symlinks={sysctl.get('fs.protected_symlinks')}")
+
+
+def collect_thadd(rep: Report) -> None:
+    """THADD-specific posture: this is also how the image proves itself."""
+    info = {}
+    for path in ("/etc/thadd/build-info", "/etc/thadd/security-posture", "/etc/thadd/selfcheck.txt"):
+        info[path] = _read(path).strip()[:2000]
+    checks = {
+        "identity": "THADD OS" in rep.os_release,
+        "build fingerprint": bool(info["/etc/thadd/build-info"]),
+        "security baseline": bool(info["/etc/thadd/security-posture"]),
+        "desktop shell": os.path.exists("/opt/thadd/desktop/index.html"),
+        "session launcher": os.path.exists("/usr/local/bin/thadd-shell-session"),
+        "AI assistant": os.path.exists("/usr/local/bin/thadd-ai"),
+        "forensic scanner": os.path.exists("/usr/local/bin/thadd-scan"),
+        "tolerant package installer": os.path.exists("/opt/thadd/tools/bin/thadd-apt-safe"),
+        "reverse engineering (rea)": bool(shutil.which("rea")),
+        "browsers": [b for b in ("firefox-esr", "firefox", "chromium", "chromium-browser")
+                     if shutil.which(b)],
+        "security tools": [t for t in ("nmap", "wireshark", "aircrack-ng", "metasploit-framework",
+                                       "john", "hashcat", "sqlmap", "burpsuite", "ghidra")
+                           if shutil.which(t) or Path(f"/usr/bin/{t}").exists()],
+        "dev toolchain": [t for t in ("gcc", "git", "python3", "node", "npm", "pwsh", "go", "rustc", "java")
+                          if shutil.which(t)],
+        "optional sets log": _read("/var/log/thadd/apt-safe.log").strip().splitlines()[-8:],
+    }
+    rep.section("thadd", {"info": info, "checks": checks})
+    if not checks["identity"]:
+        rep.finding("low", "this is not a THADD OS image", rep.os_release.splitlines()[0] if rep.os_release else "no /etc/os-release")
+    if rep.os_release and "THADD" in rep.os_release:
+        missing = [k for k in ("identity", "build fingerprint", "desktop shell", "session launcher",
+                               "AI assistant", "forensic scanner") if not checks[k]]
+        if missing:
+            rep.finding("medium", "THADD OS is incomplete", "missing: " + ", ".join(missing))
+
+
+# ------------------------------------------------------------------- rendering
+def render_markdown(rep: Report) -> str:
+    counts = rep.counts()
+    out = [f"# THADD Scan — {rep.host['hostname']}", "",
+           f"- when: {rep.host['started']}  ·  scanner: {rep.host['scanner']}  ·  python {rep.host['python']}",
+           f"- user: {rep.host['user']} (uid {rep.host['uid']}{'' if rep.host['root'] else ', unprivileged'})"
+           f"  ·  live media: {rep.host['live']}",
+           f"- verdict: **{rep.verdict()}**  (high {counts.get('high', 0)}, medium {counts.get('medium', 0)}, low {counts.get('low', 0)})",
+           ""]
+    if rep.findings:
+        out += ["## Indicators", ""]
+        for f in sorted(rep.findings, key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x["severity"], 3)):
+            out.append(f"- **{f['severity'].upper()}** {f['title']}" + (f" — {f['detail']}" if f["detail"] else ""))
+        out.append("")
+    if rep.notes:
+        out += ["## Notes", ""] + [f"- {n}" for n in rep.notes] + [""]
+    for section in rep.sections:
+        out += [f"## {section['name']}", "", "```json", json.dumps(section["data"], indent=2, default=str)[:60_000], "```", ""]
+    if rep.errors:
+        out += ["## Collector errors", "", "```"] + rep.errors + ["```", ""]
+    return "\n".join(out)
+
+
+def render_summary(rep: Report) -> str:
+    counts = rep.counts()
+    lines = [f"THADD Scan · {rep.host['hostname']} · {rep.host['started']}",
+             f"system      : {rep.sections[0]['data'].get('pretty_name', '?')} · kernel {rep.host['kernel']} · uid {rep.host['uid']}",
+             f"verdict     : {rep.verdict()}"]
+    for f in rep.findings:
+        lines.append(f"  [{f['severity']:>6}] {f['title']}" + (f" — {f['detail'][:110]}" if f["detail"] else ""))
+    for n in rep.notes:
+        lines.append(f"  note   : {n}")
+    lines.append(f"high {counts.get('high', 0)} · medium {counts.get('medium', 0)} · low {counts.get('low', 0)}")
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------------ device
+def scan_device(target: str, args) -> int:
+    """Hand a disk/image to the THADD DFIR engine (read-only, never mounted)."""
+    try:
+        from thadd.forensics import triage  # staged at /opt/thadd/app by the ISO
+    except ImportError:
+        # make it work from a checkout too
+        here = Path(__file__).resolve()
+        for candidate in (here.parents[1], Path("/opt/thadd/app")):
+            if (candidate / "thadd" / "forensics" / "triage.py").exists():
+                sys.path.insert(0, str(candidate))
+                break
+        try:
+            from thadd.forensics import triage
+        except ImportError:
+            print("this build has no DFIR engine on disk; run from the THADD OS image or add "
+                  "/opt/thadd/app to PYTHONPATH", file=sys.stderr)
+            return 2
+    print(f"THADD DFIR · {target}", file=sys.stderr)
+    report = triage.analyze(target, deep=not args.quick,
+                            progress=None if args.quiet else (lambda m: print(f"  · {m}", file=sys.stderr)))
+    text = json.dumps(report, indent=2, default=str) if args.json else triage.report_markdown(report)
+    print(text)
+    if args.out:
+        saved = triage.save_report(report, args.out)
+        print(f"saved: {saved}", file=sys.stderr)
+    return 0
+
+
+# --------------------------------------------------------------------------- main
+def run_scan(args) -> Report:
+    rep = Report()
+    collectors = [
+        ("identity", lambda: collect_identity(rep)),
+        ("accounts", lambda: collect_accounts(rep)),
+        ("processes", lambda: collect_processes(rep)),
+        ("network", lambda: collect_network(rep)),
+        ("persistence", lambda: collect_persistence(rep)),
+        ("permissions", lambda: collect_permissions(rep)),
+        ("integrity", lambda: collect_integrity(rep, args.quick)),
+        ("volatile", lambda: collect_volatile(rep, args.quick)),
+        ("kernel", lambda: collect_kernel(rep)),
+        ("thadd", lambda: collect_thadd(rep)),
+    ]
+    for name, fn in collectors:
+        try:
+            fn()
+        except Exception as exc:  # a broken collector must not lose the evidence
+            rep.errors.append(f"{name}: {type(exc).__name__}: {exc}")
+    if not rep.host["root"]:
+        rep.note("running unprivileged: /etc/shadow, process details and some logs were not readable "
+                 "(re-run with sudo for a complete picture)")
+    return rep
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="thadd-scan",
+                                 description="THADD OS forensic snapshot — read-only, nothing is modified")
+    ap.add_argument("target", nargs="?", default="", help="(optional) shortcut for --device")
+    ap.add_argument("--device", "-d", default="", help="triage a disk/image instead of the running system")
+    ap.add_argument("--out", default="", help="where to write the report (default ~/thadd-scans/<time>)")
+    ap.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
+    ap.add_argument("--summary", action="store_true", help="only the verdict lines")
+    ap.add_argument("--quick", action="store_true", help="skip dpkg --verify and the deeper walks")
+    ap.add_argument("--quiet", "-q", action="store_true")
+    args = ap.parse_args(argv)
+
+    target = args.device or args.target
+    if target:
+        return scan_device(target, args)
+
+    started = time.time()
+    rep = run_scan(args)
+    if not args.quiet and not args.summary and not args.json:
+        print(f"THADD Scan · {rep.host['hostname']} · collecting…", file=sys.stderr)
+
+    out_dir = Path(args.out) if args.out else Path(
+        os.environ.get("THADD_SCAN_HOME", os.path.expanduser("~"))) / "thadd-scans" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    written = {}
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "report.md").write_text(render_markdown(rep))
+        payload = {"host": rep.host, "os_release": rep.os_release, "findings": rep.findings,
+                   "notes": rep.notes, "errors": rep.errors, "sections": rep.sections,
+                   "elapsed_seconds": round(time.time() - rep.started, 2)}
+        (out_dir / "report.json").write_text(json.dumps(payload, indent=2, default=str))
+        written["markdown"] = str(out_dir / "report.md")
+        written["json"] = str(out_dir / "report.json")
+    except OSError as exc:
+        rep.errors.append(f"could not write the report: {exc}")
+
+    if args.summary:
+        print(render_summary(rep))
+    elif args.json:
+        print(json.dumps({"host": rep.host, "findings": rep.findings, "notes": rep.notes,
+                          "errors": rep.errors, "sections": rep.sections,
+                          "artifacts": written}, indent=2, default=str))
+    else:
+        print(render_markdown(rep))
+        if written:
+            print(f"\nsaved: {written['markdown']}\n       {written['json']}", file=sys.stderr)
+
+    counts = rep.counts()
+    return 1 if counts["high"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

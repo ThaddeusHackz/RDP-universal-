@@ -162,10 +162,19 @@ def main() -> int:
         overlay = ISO / "config" / "includes.chroot"
         for want in ("etc/skel/.config", "usr/local/bin/thadd-shell-session",
                      "opt/thadd/tools/bin/thadd-apt-safe", "opt/thadd/desktop/index.html",
-                     "opt/thadd/ai/thadd-ai.py", "opt/thadd/security/thadd-scan"):
+                     "opt/thadd/ai/thadd-ai.py", "opt/thadd/security/thadd-scan",
+                     "usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
+                     "opt/thadd/app/thadd/server/ai/cli.py", "opt/thadd/app/thadd/server/ai/agent.py",
+                     "opt/thadd/app/thadd/forensics/triage.py"):
             check(f"overlay has /{want}", (overlay / want).exists())
-        for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai"):
+        for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai",
+                        "opt/thadd/app/thadd/thadd"):
             check(f"overlay is not nested at /{doubled}", not (overlay / doubled).exists())
+        # the ISO's own commands have to be executable inside the image
+        for tool in ("usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
+                     "opt/thadd/security/thadd-scan", "opt/thadd/tools/bin/thadd-apt-safe"):
+            path = overlay / tool
+            check(f"/{tool} is executable", path.exists() and os.access(path, os.X_OK))
 
         produced = REPO / "dist" / "THADD-OS-0.0-test-aurora-amd64.iso"
         check("ISO collected into dist/", produced.is_file(),
