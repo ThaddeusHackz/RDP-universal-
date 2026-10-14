@@ -81,12 +81,19 @@ log "staging overlay -> $(realpath --relative-to="$REPO_ROOT" "$OVERLAY" 2>/dev/
 stage() { # stage <src-relative-to-repo> <dest-in-image>
   local src="$REPO_ROOT/$1" dest="$OVERLAY/$2"
   [[ -e "$src" ]] || { warn "skip staging $1 (missing)"; return 0; }
-  mkdir -p "$(dirname "$dest")"
+  mkdir -p "$dest"
   rm -rf "$dest"
-  # node_modules, build logs and the test bundle must never reach the image
+  mkdir -p "$dest"
+  # The target directory is created first and the source is spelled `src/.`
+  # with a `dest/` target, so the *contents* always land in dest - regardless of
+  # how rsync interprets a destination that does not exist yet.  Getting this
+  # wrong is silent and brutal: an earlier build shipped
+  # /opt/thadd/tools/tools/bin/thadd-apt-safe and /etc/skel/skel/.config, so
+  # every hook looked in the right place and found nothing (the desktop profile
+  # was skipped as "not staged" and the live user's session files never applied).
   rsync -a --exclude 'node_modules/' --exclude '__pycache__/' --exclude '*.pyc' \
         --exclude 'bundle.js' --exclude '*.log' --exclude '.git/' \
-        --exclude 'package-lock.json' "$src" "$dest"
+        --exclude 'package-lock.json' "$src"/. "$dest"/
   # Scripts must arrive executable: git only carries the exec bit when the file
   # was committed with it, and a 0644 tool inside the ISO is a broken promise
   # (it silently disabled the optional-package installer for two releases).
@@ -104,6 +111,31 @@ stage desktop  opt/thadd/desktop
 stage security opt/thadd/security
 stage tools    opt/thadd/tools
 stage reverse-engineering opt/thadd/reverse-engineering
+
+# The staged tree is what the hooks and the live session will read: check the
+# layout instead of trusting the copy (see the comment in stage()).
+check_overlay() { # check_overlay <path-in-image> <description>
+  if [[ -e "$OVERLAY/$1" ]]; then
+    ok "overlay: /$1"
+  else
+    echo "  ✗ the staged overlay is missing /$1 ($2)" >&2
+    echo "  --- what is actually in the overlay ---" >&2
+    ( cd "$OVERLAY" && find . -maxdepth 4 | sort | sed 's/^/      /' | head -60 ) >&2 || true
+    die "ISO overlay layout is wrong (see the listing above)"
+  fi
+}
+
+log "verifying the staged overlay"
+check_overlay "etc/skel/.config" "the live user's desktop profile"
+check_overlay "usr/local/bin/thadd-shell-session" "the session launcher"
+check_overlay "opt/thadd/tools/bin/thadd-apt-safe" "the tolerant package installer"
+check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
+check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
+check_overlay "opt/thadd/security/thadd-scan" "the security suite"
+for doubled in etc/skel/skel usr/local/local opt/thadd/tools/tools opt/thadd/ai/ai opt/thadd/desktop/desktop; do
+  [[ -e "$OVERLAY/$doubled" ]] && die "the overlay is nested one level too deep: /$doubled exists (staging copied the directory instead of its contents)"
+done
+ok "overlay layout is correct (no nested copies)"
 
 # Optional package sets (installed inside the chroot by thadd-apt-safe)
 mkdir -p "$OVERLAY/opt/thadd/iso-packages"

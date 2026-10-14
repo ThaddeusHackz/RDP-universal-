@@ -159,6 +159,14 @@ def main() -> int:
                      "UEFI bootloader: grub-efi", "live boot parameters", "every release-critical setting is in place"):
             check(f"reported: {want}", want in proc.stdout, "missing from the build log")
         check("lb build ran", "stub build finished" in proc.stdout)
+        overlay = ISO / "config" / "includes.chroot"
+        for want in ("etc/skel/.config", "usr/local/bin/thadd-shell-session",
+                     "opt/thadd/tools/bin/thadd-apt-safe", "opt/thadd/desktop/index.html",
+                     "opt/thadd/ai/thadd-ai.py", "opt/thadd/security/thadd-scan"):
+            check(f"overlay has /{want}", (overlay / want).exists())
+        for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai"):
+            check(f"overlay is not nested at /{doubled}", not (overlay / doubled).exists())
+
         produced = REPO / "dist" / "THADD-OS-0.0-test-aurora-amd64.iso"
         check("ISO collected into dist/", produced.is_file(),
               f"{[p.name for p in (REPO / 'dist').glob('*.iso')]}")

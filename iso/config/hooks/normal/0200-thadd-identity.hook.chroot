@@ -145,10 +145,26 @@ Reverse  : REA (rea-agents) — binaries, Electron, .NET, websites
 EOF
 
 # ---- live user -----------------------------------------------------------
-groupadd -f thadd 2>/dev/null || true
+# `useradd -G a,b,c` aborts the moment ONE of those groups does not exist, and
+# `useradd` without -g aborts when a group with the user's name already exists
+# ("group thadd exists") - both exit non-zero, and a non-zero hook fails the
+# whole build.  Create the user first, then add it to whatever groups exist.
 if ! id thadd >/dev/null 2>&1; then
-    useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev,bluetooth,scanner,cdrom,floppy,disk,adm thadd 2>/dev/null \
-      || useradd -m -s /bin/bash -G sudo thadd
+    groupadd -f thadd 2>/dev/null || true
+    if ! getent group thadd >/dev/null 2>&1; then
+        useradd -m -s /bin/bash thadd 2>/dev/null || true
+    else
+        useradd -m -s /bin/bash -g thadd thadd 2>/dev/null || useradd -m -s /bin/bash thadd 2>/dev/null || true
+    fi
+fi
+if id thadd >/dev/null 2>&1; then
+    for _grp in sudo audio video plugdev netdev bluetooth scanner cdrom floppy disk adm; do
+        getent group "$_grp" >/dev/null 2>&1 && usermod -aG "$_grp" thadd 2>/dev/null || true
+    done
+    echo "✓ live user thadd ready ($(id -Gn thadd 2>/dev/null | tr ' ' ','))"
+else
+    echo "! could not create the live user - the image will still boot, but the"
+    echo "  documented login (thadd/thadd, NOPASSWD sudo) will not exist"
 fi
 printf 'thadd:thadd\n' | chpasswd 2>/dev/null || true
 # Live-image convention: full sudo for the live user, documented and auditable.
