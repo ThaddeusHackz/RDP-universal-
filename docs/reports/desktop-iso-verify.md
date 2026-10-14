@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38580423384](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38580423384)
-- commit: `5544686c551e163c59d7125b9ebed5d1312320dc`
+- run: [38584362319](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38584362319)
+- commit: `38bd5146967b46c6ea00461bb6c843df514bd6fe`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -12,7 +12,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── artefact ──
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  2042 MiB  ·  4a1c943268999f06d2d94e7f9126ef55…
+  2042 MiB  ·  39ce7438cf4ae71dd28863086431e823…
   ✓ PASS size is a plausible full desktop image (2042 MiB)
   ✓ PASS fits a DVD / release asset split threshold
   ✓ PASS sha256 sidecar verifies
@@ -27,9 +27,9 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (61583222 bytes)
+  ✓ PASS live/initrd.img present (61583219 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
-  ! WARN isolinux/syslinux.cfg missing — legacy BIOS boot degraded
+  ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
 
 ── ship contents (deeper look inside the squashfs) ──
@@ -68,6 +68,6 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS kernel present: squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64
   ✓ PASS initramfs present: squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64
 
-═══ verification: 0 failure(s), 1 warning(s) ═══
+═══ verification: 0 failure(s), 0 warning(s) ═══
   RESULT: SHIPPABLE
 ```
