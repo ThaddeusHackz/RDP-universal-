@@ -37,7 +37,8 @@ system-config-printer
 simple-scan
 sane-utils
 # --- Sound / bluetooth / cameras ---
-bluez-utils
+bluez
+bluez-tools
 pulseaudio-module-bluetooth
 pipewire
 pipewire-pulse
@@ -49,7 +50,7 @@ gir1.2-gtk-3.0
 gir1.2-webkit2-4.1
 gir1.2-glib-2.0
 gir1.2-notify-0.7
-gir1.2-appindicator3-0.1
+gir1.2-ayatanaappindicator3-0.1
 python3-gi
 python3-gi-cairo
 python3-dbus
@@ -65,9 +66,7 @@ festival
 festvox-en1
 pocketsphinx
 pocketsphinx-en-us
-cmusphinx-en-us-5.2
-vosk
-python3-vosk
+cmusphinx-en-us
 speech-dispatcher
 speech-dispatcher-espeak-ng
 orca
@@ -77,6 +76,11 @@ ripgrep
 fzf
 xdotool
 wmctrl
+# --- Browsers and apps that only exist in a vendor's own repository ---
+# (google-chrome-stable, microsoft-edge-stable, brave-browser, VS Code and
+#  PowerShell are installed by 0450-thadd-thirdparty-tools from Google's,
+#  Microsoft's and Brave's archives; Opera/Vivaldi/Slack/Discord/Zoom/Spotify
+#  have no apt repository we can rely on and are deliberately left out.)
 # --- Office / docs / misc productivity ---
 libreoffice-writer
 libreoffice-calc
@@ -97,17 +101,3 @@ vinagre
 filezilla
 transmission-gtk
 qbittorrent
-google-chrome-stable
-microsoft-edge-stable
-brave-browser
-opera-stable
-vivaldi-stable
-teams
-slack-desktop
-discord
-zoom
-spotify-client
-code
-code-insiders
-sublime-text
-jetbrains-toolbox

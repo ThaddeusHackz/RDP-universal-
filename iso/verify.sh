@@ -360,6 +360,10 @@ need_file usr/bin/nmap                  "nmap (security suite)"       soft
 need_file usr/bin/git                   "git"                         hard
 need_file usr/bin/python3               "python3"                     hard
 need_any  "PowerShell 7"                  soft opt/microsoft/powershell/7/pwsh usr/bin/pwsh
+need_any  "VS Code"                       soft usr/bin/code usr/share/code/code
+need_any  "Google Chrome"                 soft opt/google/chrome/chrome
+need_any  "Microsoft Edge"                soft opt/microsoft/msedge/msedge
+need_any  "Brave"                         soft usr/bin/brave-browser opt/brave.com/brave/brave-browser
 need_file usr/bin/epiphany              "Epiphany browser"            soft
 need_file usr/bin/qutebrowser           "qutebrowser"                 soft
 need_file usr/bin/falkon                "Falkon browser"              soft

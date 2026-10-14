@@ -110,7 +110,55 @@ else
 fi
 rm -f /tmp/msf.key
 
-# ---- 3. radare2: try the archive first, then say so plainly -----------------
+# ---- 3. the browsers and the editor that Debian does not carry ---------------
+# Firefox ESR and Chromium are in the mandatory list; these four come from the
+# vendors themselves, which is the only way to ship them at all.
+try_pkg() { # try_pkg <package> <label>
+    if apt-get install $APT_OPTS "$1" >>"$LOG" 2>&1; then
+        say "  ✓ $2 installed"
+        RESULTS="${RESULTS}$1=installed\n"
+    else
+        say "  ✗ $2 could not be installed"
+        RESULTS="${RESULTS}$1=failed\n"
+    fi
+}
+
+say "» VS Code and Microsoft Edge (Microsoft's repository is already configured)"
+try_pkg code                 "VS Code"
+try_pkg microsoft-edge-stable "Microsoft Edge"
+
+say "» Google Chrome (vendor .deb)"
+if fetch "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" /tmp/chrome.deb; then
+    if apt-get install $APT_OPTS /tmp/chrome.deb >>"$LOG" 2>&1; then
+        say "  ✓ google-chrome-stable installed"
+        RESULTS="${RESULTS}google-chrome-stable=installed\n"
+    else
+        say "  ✗ google-chrome-stable could not be installed"
+        RESULTS="${RESULTS}google-chrome-stable=failed\n"
+    fi
+else
+    say "  ✗ could not download Chrome (offline?)"
+    RESULTS="${RESULTS}google-chrome-stable=unreachable\n"
+fi
+rm -f /tmp/chrome.deb
+
+say "» Brave (vendor repository)"
+if fetch "https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg" \
+        /usr/share/keyrings/brave-browser-archive-keyring.gpg; then
+    printf 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main\n' \
+        > /etc/apt/sources.list.d/brave-browser-release.list
+    if apt-get update -qq >>"$LOG" 2>&1; then
+        try_pkg brave-browser "Brave"
+    else
+        say "  ✗ apt-get update failed after adding Brave's repository"
+        RESULTS="${RESULTS}brave-browser=update-failed\n"
+    fi
+else
+    say "  ✗ could not download Brave's key (offline?)"
+    RESULTS="${RESULTS}brave-browser=unreachable\n"
+fi
+
+# ---- 4. radare2: try the archive first, then say so plainly -----------------
 say "» radare2: checking the configured archive"
 if apt-get install $APT_OPTS radare2 >>"$LOG" 2>&1; then
     say "  ✓ radare2 installed"
