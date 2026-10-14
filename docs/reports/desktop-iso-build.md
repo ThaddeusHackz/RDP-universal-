@@ -1,31 +1,31 @@
 # THADD OS desktop ISO - live-build report
 
-- run: [38487792199](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38487792199)
-- commit: `00ebe8bc42919c416054a54a2580fea2c7c83b4f`
+- run: [38488668111](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38488668111)
+- commit: `88470ae727178f374e0b8cfd203df69264436136`
 - result: **failed**
 
 ```
 == ls dist ==
 total 968
-drwxr-xr-x  2 runner runner   4096 Oct 14 00:02 .
-drwxr-xr-x 17 runner runner   4096 Oct 14 00:02 ..
--rw-r--r--  1 root   root   474457 Oct 14 00:08 build.log
--rw-r--r--  1 runner runner 506139 Oct 14 00:08 desktop-build-trace.log
+drwxr-xr-x  2 runner runner   4096 Oct 14 00:11 .
+drwxr-xr-x 17 runner runner   4096 Oct 14 00:11 ..
+-rw-r--r--  1 root   root   474504 Oct 14 00:16 build.log
+-rw-r--r--  1 runner runner 507330 Oct 14 00:16 desktop-build-trace.log
 == ls iso ==
 total 96
-drwxr-xr-x  9 runner runner  4096 Oct 14 00:08 .
-drwxr-xr-x 17 runner runner  4096 Oct 14 00:02 ..
-drwxr-xr-x  2 root   root    4096 Oct 14 00:08 .build
-drwxr-xr-x  2 runner runner  4096 Oct 14 00:02 auto
--rwxr-xr-x  1 runner runner 14777 Oct 14 00:02 build.sh
-drwxr-xr-x  6 root   root    4096 Oct 14 00:03 cache
-drwxr-xr-x 18 root   root    4096 Oct 14 00:07 chroot
--rw-r--r--  1 root   root   30062 Oct 14 00:07 chroot.packages.install
-drwxr-xr-x 21 runner runner  4096 Oct 14 00:02 config
-drwxr-xr-x  3 root   root    4096 Oct 14 00:02 local
-drwxr-xr-x  2 runner runner  4096 Oct 14 00:02 tests
--rw-r--r--  1 runner runner  7740 Oct 14 00:02 verify.sh
--rw-r--r--  1 runner runner    53 Oct 14 00:02 version.env
+drwxr-xr-x  9 runner runner  4096 Oct 14 00:16 .
+drwxr-xr-x 17 runner runner  4096 Oct 14 00:11 ..
+drwxr-xr-x  2 root   root    4096 Oct 14 00:16 .build
+drwxr-xr-x  2 runner runner  4096 Oct 14 00:10 auto
+-rwxr-xr-x  1 runner runner 15156 Oct 14 00:10 build.sh
+drwxr-xr-x  6 root   root    4096 Oct 14 00:12 cache
+drwxr-xr-x 18 root   root    4096 Oct 14 00:15 chroot
+-rw-r--r--  1 root   root   30062 Oct 14 00:15 chroot.packages.install
+drwxr-xr-x 21 runner runner  4096 Oct 14 00:11 config
+drwxr-xr-x  3 root   root    4096 Oct 14 00:11 local
+drwxr-xr-x  2 runner runner  4096 Oct 14 00:10 tests
+-rw-r--r--  1 runner runner  7740 Oct 14 00:10 verify.sh
+-rw-r--r--  1 runner runner    53 Oct 14 00:10 version.env
 
 == iso/config/common ==
 LB_CONFIGURATION_VERSION="20230502"
@@ -133,13 +133,13 @@ LB_UEFI_SECURE_BOOT="disable"
 LB_SOURCE="false"
 LB_SOURCE_IMAGES="tar"
 == did iso/auto/config run? ==
-157:+ [[ -f auto/config ]]
-158:+ chmod +x auto/config
-179:+ ./auto/config
-181:P: Updating config tree for a debian/bookworm/amd64 system
-183:+ ok 'iso/auto/config applied (every flag on the lb config command line)'
-184:+ printf '%s  ✓%s %s\n' '[38;5;42m' '[0m' 'iso/auto/config applied (every flag on the lb config command line)'
-186:[38;5;42m  ✓[0m iso/auto/config applied (every flag on the lb config command line)
+164:+ [[ -f auto/config ]]
+165:+ chmod +x auto/config
+186:+ ./auto/config
+188:P: Updating config tree for a debian/bookworm/amd64 system
+190:[38;5;42m  ✓[0m iso/auto/config applied (every flag on the lb config command line)
+191:+ ok 'iso/auto/config applied (every flag on the lb config command line)'
+192:+ printf '%s  ✓%s %s\n' '[38;5;42m' '[0m' 'iso/auto/config applied (every flag on the lb config command line)'
 == what the staged lists ask for ==
    68 iso/config/package-lists/00-core.list.chroot
    88 iso/config/package-lists/10-desktop.list.chroot
@@ -162,13 +162,13 @@ iso/config/packages/optional-firmware.txt:18:firmware-brcm80211
 iso/config/packages/optional-firmware.txt:19:firmware-amd-graphics
 
 ===== dist/build.log (first 40 lines) =====
-[2026-10-14 00:02:30] lb build 
+[2026-10-14 00:11:20] lb build 
 P: live-build 20230502
 P: Building for a debian/bookworm/amd64 system
-[2026-10-14 00:02:30] lb bootstrap 
+[2026-10-14 00:11:20] lb bootstrap 
 P: Setting up clean exit handler
-[2026-10-14 00:02:30] lb bootstrap_cache restore
-[2026-10-14 00:02:30] lb bootstrap_debootstrap 
+[2026-10-14 00:11:20] lb bootstrap_cache restore
+[2026-10-14 00:11:20] lb bootstrap_debootstrap 
 P: Begin bootstrapping system...
 P: If the following stage fails, the most likely cause of the problem is with your mirror configuration or a caching proxy.
 P: Running debootstrap (download-only)...
@@ -299,9 +299,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,270 bytes  received 1,739 bytes  2,330,018.00 bytes/sec
+sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:07:37] lb chroot_hooks 
+[2026-10-14 00:15:27] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
@@ -315,8 +315,8 @@ P: Executing hook config/hooks/normal/0100-thadd-runtimes.hook.chroot...
 ✓ REA available: installed
 ✓ runtimes stage complete
 P: Executing hook config/hooks/normal/0200-thadd-identity.hook.chroot...
-── THADD OS · identity rolling (aurora) ──
-cp: '/etc/os-release' and '/usr/lib/os-release' are the same file
+── THADD OS · identity 2026.10.14 (aurora) ──
+useradd: group thadd exists - if you want to add this user to that group, use -g.
 E: config/hooks/normal/0200-thadd-identity.hook.chroot failed (exit non-zero). You should check for errors.
 E: An unexpected failure occurred, exiting...
 P: Begin unmounting filesystems...
@@ -398,9 +398,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,270 bytes  received 1,739 bytes  2,330,018.00 bytes/sec
+sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:07:37] lb chroot_hooks 
+[2026-10-14 00:15:27] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
@@ -414,8 +414,8 @@ P: Executing hook config/hooks/normal/0100-thadd-runtimes.hook.chroot...
 ✓ REA available: installed
 ✓ runtimes stage complete
 P: Executing hook config/hooks/normal/0200-thadd-identity.hook.chroot...
-── THADD OS · identity rolling (aurora) ──
-cp: '/etc/os-release' and '/usr/lib/os-release' are the same file
+── THADD OS · identity 2026.10.14 (aurora) ──
+useradd: group thadd exists - if you want to add this user to that group, use -g.
 E: config/hooks/normal/0200-thadd-identity.hook.chroot failed (exit non-zero). You should check for errors.
 E: An unexpected failure occurred, exiting...
 P: Begin unmounting filesystems...
@@ -459,9 +459,9 @@ usr/local/local/bin/thadd
 usr/local/local/bin/thadd-desktop-server
 usr/local/local/bin/thadd-shell-session
 
-sent 1,163,270 bytes  received 1,739 bytes  2,330,018.00 bytes/sec
+sent 1,163,287 bytes  received 1,743 bytes  2,330,060.00 bytes/sec
 total size is 1,156,224  speedup is 0.99
-[2026-10-14 00:07:37] lb chroot_hooks 
+[2026-10-14 00:15:27] lb chroot_hooks 
 P: Begin executing hooks...
 P: Executing hook config/hooks/normal/0000-thadd-apt-safe.hook.chroot...
 ──────────────────────────────────────────────────────────
@@ -475,8 +475,8 @@ P: Executing hook config/hooks/normal/0100-thadd-runtimes.hook.chroot...
 ✓ REA available: installed
 ✓ runtimes stage complete
 P: Executing hook config/hooks/normal/0200-thadd-identity.hook.chroot...
-── THADD OS · identity rolling (aurora) ──
-cp: '/etc/os-release' and '/usr/lib/os-release' are the same file
+── THADD OS · identity 2026.10.14 (aurora) ──
+useradd: group thadd exists - if you want to add this user to that group, use -g.
 E: config/hooks/normal/0200-thadd-identity.hook.chroot failed (exit non-zero). You should check for errors.
 E: An unexpected failure occurred, exiting...
 P: Begin unmounting filesystems...
