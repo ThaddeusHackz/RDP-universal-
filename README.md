@@ -25,7 +25,7 @@ workstation, a security lab, an AI operator and a forensics workbench — in one
 | Disc | What it is | Built by |
 | --- | --- | --- |
 | **`THADD-OS-1.0-x86_64.iso`** (78 MB) | The THADD live system: own boot chain, own userland, the THADD service (105 RPC methods), forensic engine, AI operator and the desktop shell. UEFI. | `thadd/boot/*` — pure Python, no xorriso/mtools/live-build |
-| **`THADD-OS-<version>-aurora-amd64.iso`** (~4.7 GB) | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion; **Firefox ESR, Chromium, Chrome, Edge, Brave, Epiphany, qutebrowser, Falkon, Tor Browser, w3m, lynx**; the dev toolchain (gcc, git, node/npm, Python, **VS Code**, **PowerShell 7**); the Parrot/HTB-class security and forensics sets (**Metasploit, nmap, sqlmap, hydra, aircrack-ng, hashcat, John, bettercap, mitmproxy, impacket, wireshark, sleuthkit, binwalk**, …); plus the in-OS AI assistant and forensic scanner. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
+| **`THADD-OS-<version>-aurora-amd64.iso`** (~5.6 GB) | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion; **Firefox ESR, Chromium, Chrome, Edge, Brave, Epiphany, qutebrowser, Falkon, Tor Browser, w3m, lynx**; the dev toolchain (gcc, git, node/npm, Python, **VS Code**, **PowerShell 7**); the Parrot/HTB-class security and forensics sets (**Metasploit, nmap, sqlmap, hydra, aircrack-ng, hashcat, John, bettercap, mitmproxy, impacket, wireshark, sleuthkit, binwalk**, …); plus the in-OS AI assistant and forensic scanner. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
 
 Both are attached to every [**Release**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases)
 by CI, which builds them from source on every run. The desktop image is larger than GitHub's 2 GiB
@@ -152,8 +152,8 @@ kernel/initramfs reads), and the desktop ISO is proven structurally — boot rec
 squashfs contents, kernel and initramfs — plus by the image's own self-test running inside its
 chroot during the build. Nothing in this repository claims an observed VirtualBox boot. The
 Debian-live desktop ISO carries the heavyweight stack (browsers, the security and dev sets, office,
-IDEs) because it installs them from apt during its build; that is also why it is ~2 GB and shipped
-in parts. Packages that have vanished from a Debian
+IDEs) because it installs them from apt during its build; that is also why it is ~5.6 GB and shipped
+in three parts. Packages that have vanished from a Debian
 release are logged and skipped by `thadd-apt-safe` rather than failing the build — the verification
 report lists exactly which ones, and it is why the installer's own report is shipped inside the
 image: PowerShell and Metasploit come from Microsoft's and Rapid7's repositories, Chrome, Edge,
