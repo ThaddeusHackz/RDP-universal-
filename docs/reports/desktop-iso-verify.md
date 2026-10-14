@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38604974580](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38604974580)
-- commit: `d8df8fe322aaeed033ea474b26ef886a0b842286`
+- run: [38612831702](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38612831702)
+- commit: `b0757ca4be9dba80c1a9513eefb3dca779ec0303`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -11,12 +11,12 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.rNxRdR
-  disk: /dev/root 145G 68G 77G 48% /
+  workspace: /tmp/thadd-verify.75pDAI
+  disk: /dev/root 145G 69G 76G 48% /
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  4773 MiB  ·  02a1b99eab589d33bf693b1b39a7c232…
-  ✓ PASS size is a plausible full desktop image (4773 MiB)
-  ! WARN very large (4773 MiB) — release will be split into parts
+  5115 MiB  ·  44a660ff859339af2b1147ebc61c80f2…
+  ✓ PASS size is a plausible full desktop image (5115 MiB)
+  ! WARN very large (5115 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
 
 ── boot records (hybrid BIOS + UEFI) ──
@@ -29,14 +29,14 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62685971 bytes)
+  ✓ PASS live/initrd.img present (62685998 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
 
 ── ship contents (deeper look inside the squashfs) ──
-  ✓ PASS live/filesystem.squashfs present and extractable (4.6G)
-  ✓ PASS squashfs inventory: 584984 entries
+  ✓ PASS live/filesystem.squashfs present and extractable (5.0G)
+  ✓ PASS squashfs inventory: 585574 entries
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
@@ -67,17 +67,21 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── optional package sets (what the tolerant installer did) ──
   ✓ PASS installer ran 7 optional set(s)
   ✓ PASS thadd-apt-safe: 10 resolvable / 10 requested
-  ✓ PASS thadd-apt-safe: 80 resolvable / 105 requested
+  ✓ PASS thadd-apt-safe: 83 resolvable / 90 requested
   ✓ PASS thadd-apt-safe: 183 resolvable / 202 requested
   ✓ PASS thadd-apt-safe: 95 resolvable / 159 requested
   ✓ PASS thadd-apt-safe: 121 resolvable / 174 requested
   ✓ PASS thadd-apt-safe: 58 resolvable / 64 requested
   ✓ PASS thadd-apt-safe: 10 resolvable / 10 requested
   ✓ PASS at least one set installed in a single batch (7 of 7)
-  ! WARN 167 requested package(s) are not in this release's repos: bluez-utils brave-browser cmusphinx-en-us-5.2 code code-insiders discord gir1.2-appindicator3-0.1 google-chrome-stable jetbrains-toolbox microsoft-edge-stable o
+  ! WARN 149 requested package(s) are not in this release's repos: cmusphinx-en-us python3-sounddevice python3-speechrecognition virtualbox-guest-dkms virtualbox-guest-utils virtualbox-guest-x11 xserver-xorg-input-vmmouse awk c
   ! WARN third-party: ==============================
   ✓ PASS third-party: powershell=installed
   ✓ PASS third-party: metasploit=installed
+  ! WARN third-party: code=failed
+  ! WARN third-party: microsoft-edge-stable=failed
+  ✓ PASS third-party: google-chrome-stable=installed
+  ✓ PASS third-party: brave-browser=installed
   ! WARN third-party: radare2=not-packaged (not in Debian, not installed)
 
 ── toolkit the user was promised ──
@@ -111,6 +115,10 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS git  (usr/bin/git)
   ✓ PASS python3  (usr/bin/python3)
   ✓ PASS PowerShell 7  (opt/microsoft/powershell/7/pwsh)
+  ! WARN VS Code missing (looked in: usr/bin/code usr/share/code/code)
+  ✓ PASS Google Chrome  (opt/google/chrome/chrome)
+  ! WARN Microsoft Edge missing (looked in: opt/microsoft/msedge/msedge)
+  ✓ PASS Brave  (usr/bin/brave-browser)
   ✓ PASS Epiphany browser  (usr/bin/epiphany)
   ✓ PASS qutebrowser  (usr/bin/qutebrowser)
   ✓ PASS Falkon browser  (usr/bin/falkon)
@@ -123,6 +131,6 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS kernel present: boot/firmware/vmlinuz-6.1.0-53-amd64
   ✓ PASS initramfs present: boot/firmware/initrd.img-6.1.0-53-amd64
 
-═══ verification: 0 failure(s), 7 warning(s) ═══
+═══ verification: 0 failure(s), 11 warning(s) ═══
   RESULT: SHIPPABLE
 ```
