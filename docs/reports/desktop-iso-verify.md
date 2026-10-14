@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38584362319](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38584362319)
-- commit: `38bd5146967b46c6ea00461bb6c843df514bd6fe`
+- run: [38588280625](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38588280625)
+- commit: `74dbbf2b01653ca32d55ccd59cbf6d32551ec481`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -12,7 +12,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── artefact ──
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  2042 MiB  ·  39ce7438cf4ae71dd28863086431e823…
+  2042 MiB  ·  3f0cb08e84f0461634b8bc38e4e5985f…
   ✓ PASS size is a plausible full desktop image (2042 MiB)
   ✓ PASS fits a DVD / release asset split threshold
   ✓ PASS sha256 sidecar verifies
@@ -63,6 +63,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS REA reverse-engineering  (usr/local/bin/rea)
   ✓ PASS os-release brands the system THADD OS
   ✓ PASS ID=thadd
+  ✓ PASS in-image self-test: 42 passed · 0 failed · 4 warned
 
 ── kernel + initramfs ──
   ✓ PASS kernel present: squashfs-root/boot/firmware/vmlinuz-6.1.0-53-amd64
