@@ -79,7 +79,11 @@ head1 "image layout"
 #   * `-osirrox on -extract` either produces the bytes or it does not, and it is
 #     the same call the squashfs extraction below depends on.
 # So: list for the report, and *probe* for the verdict.
-LIST="$(xorriso -indev "$ISO_PATH" -find / -type f 2>/dev/null || true)"
+LIST_RAW="$(xorriso -indev "$ISO_PATH" -find / -type f 2>/dev/null || true)"
+# xorriso prints paths in whatever shape it likes (with or without a leading
+# "./", sometimes with an ISO 9660 ";1" version).  Normalise before grepping.
+LIST="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^\.\///' -e 's/;[0-9]*$//' \
+        <<<"$LIST_RAW" | sed 's#^/*#/#' | sort -u | grep '^/' || true)"
 if [[ -n "$LIST" ]]; then
   printf '  %s\n' "$(wc -l <<<"$LIST") file(s) listed on the ISO"
 else
@@ -110,10 +114,16 @@ for required in live/vmlinuz live/initrd.img; do
     fail "$required MISSING — image is not bootable"
   fi
 done
-for optional in isolinux/isolinux.bin isolinux/syslinux.cfg; do
-  if iso_has "$optional"; then pass "$optional present (legacy BIOS boot)";
-  else warn "$optional missing — legacy BIOS boot degraded"; fi
+if iso_has "isolinux/isolinux.bin"; then
+  pass "isolinux/isolinux.bin present (legacy BIOS boot)"
+else
+  warn "isolinux/isolinux.bin missing — legacy BIOS boot degraded"
+fi
+# debian-live writes isolinux/isolinux.cfg; some builds keep the syslinux name
+for cfg in isolinux/isolinux.cfg isolinux/syslinux.cfg syslinux/syslinux.cfg; do
+  if iso_has "$cfg"; then pass "$cfg present (BIOS boot menu)"; CFG_FOUND="$cfg"; break; fi
 done
+[[ -n "${CFG_FOUND:-}" ]] || warn "no syslinux/isolinux boot menu config found — BIOS boot may be menu-less"
 
 # UEFI: live-build ships the EFI system partition as a FAT image (efi.img) or as
 # EFI/BOOT/BOOTX64.EFI on the ISO root, depending on version/bootloader choice.
@@ -126,8 +136,10 @@ if [[ -n "$EFI_FOUND" ]]; then
 else
   warn "no EFI boot image found — UEFI-only machines will not boot (BIOS still works)"
 fi
-if iso_has "isolinux/isohdpfx.bin" || grep -qE '^/(isolinux|syslinux)/' <<<"$LIST"; then
-  pass "hybrid MBR boot files present (the ISO boots as a disk too)"
+if iso_has "isolinux/isohdpfx.bin"; then
+  pass "isolinux/isohdpfx.bin present (the ISO also boots as a USB disk)"
+elif grep -qE '^/(isolinux|syslinux)/' <<<"$LIST"; then
+  pass "isolinux boot files present (the ISO also boots as a disk)"
 fi
 
 head1 "ship contents (deeper look inside the squashfs)"
