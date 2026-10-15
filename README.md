@@ -2,6 +2,17 @@
 
 # THADD OS
 
+<p align="center">
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases/tag/v1.6"><img src="https://img.shields.io/github/v/release/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=blue" alt="Release"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/stargazers"><img src="https://img.shields.io/github/stars/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=yellow" alt="Stars"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/forks"><img src="https://img.shields.io/github/forks/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=green" alt="Forks"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/issues"><img src="https://img.shields.io/github/issues/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=red" alt="Issues"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/commits/main"><img src="https://img.shields.io/github/last-commit/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=purple" alt="Last commit"></a>
+  <img src="https://img.shields.io/badge/platform-amd64%20%2F%20x86__64-lightgrey?style=for-the-badge" alt="Platform">
+  <img src="https://img.shields.io/badge/base-Debian%2012%20bookworm-orange?style=for-the-badge" alt="Base">
+</p>
+
+
 **A Debian-based live desktop, experimental Linux live-image tooling, and a browser/cloud workstation project—not a new kernel.** THADD combines Linux and Debian userland with XFCE, a custom web desktop, Python OS services, an AI assistant and security/forensics utilities.
 
 > **Start here:** [Download and join the desktop ISO](docs/QUICKSTART.md#1-download-the-desktop-image), then [try it safely in VirtualBox](docs/QUICKSTART.md#3-create-a-virtualbox-vm). Download **all three numbered parts from the same release**. They are pieces of **one** image, not bootable ISOs. Do not extract them or rename a part to `.iso`.
@@ -14,6 +25,7 @@
 ## Contents
 
 - [What it is and how it looks](#what-it-is-and-how-it-looks)
+- [Why THADD OS?](#why-thadd-os)
 - [Versions, architectures and downloads](#versions-architectures-and-downloads)
 - [Quick install (3 parts)](#quick-install-3-parts)
 - [Hardware and VM resources](#hardware-and-vm-resources)
@@ -25,6 +37,7 @@
 - [Screenshots, GIF and video](#screenshots-gif-and-video)
 - [Troubleshooting and diagnostics](#troubleshooting-and-diagnostics)
 - [Build and CI](#build-and-ci)
+- [Contributing](#contributing)
 - [Licensing, credits and guides](#licensing-credits-and-guides)
 
 ## What it is and how it looks
@@ -42,6 +55,16 @@ There are distinct systems in this repository; screenshots or tests of one do no
 | **Cloud workstation** | `Dockerfile`, `cloud/`, `scripts/`: Debian/XFCE, RDP and browser/noVNC access. A container shares the host kernel; it does not test ISO firmware boot. |
 
 The intended native layout is a top panel/application menu and bottom dock, with themed windows. The custom shell provides its own launcher, windows, settings and assistant. See the [desktop quick start](docs/QUICKSTART.md); runtime desktop integration remains to be tested in a real VM.
+
+## Why THADD OS?
+
+- 🐧 **Debian 12 live desktop** you can boot in VirtualBox in minutes (download 3 parts → join → boot).
+- 🖥️ **XFCE desktop** with a custom web shell, dock, launcher and control center.
+- 🤖 **Built-in AI assistant** (`thadd-ai`) with filesystem/shell tools and offline fallback.
+- 🔐 **Security & forensics tooling** — scanner, `rea`, DFIR helpers, hardening checks.
+- 🧪 **Experimental minimal ISO** (~78 MB) with a custom UEFI boot path.
+- ☁️ **Cloud workstation** via Docker + noVNC/RDP.
+- 📸 **31 rendered desktop snapshots** + a 49-second demo video in the repo.
 
 ## Versions, architectures and downloads
 
@@ -314,6 +337,15 @@ sudo bash iso/build.sh --profile desktop
 ```
 
 The actual checksum command must run **inside `dist`** because sidecars contain basenames. Never set `THADD_SKIP_VERIFY=1` for a publishable image. CI/source tests, mocked firmware tests, squashfs inspection, browser tests and cloud RDP login are useful but **not a substitute for booting the released ISO**. [Real-VM checklist and results status](docs/VM-TESTING.md). [This review’s actual local test results](docs/reports/documentation-review-2026-10-15.md).
+
+## Contributing
+
+Contributions, bug reports and VM test results are welcome. Please:
+- Keep claims evidence-based — label anything not actually booted/tested as unverified.
+- Preserve exact ISO filename/hash/commit and sanitized logs when [reporting an issue](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/issues).
+- Do not commit build output (`build/`, `dist/`, `out/`, `iso/chroot/`).
+
+If this project helped you, please ⭐ **star the repo** — it helps others discover it.
 
 ## Licensing, credits and guides
 
