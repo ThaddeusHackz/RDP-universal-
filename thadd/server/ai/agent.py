@@ -229,6 +229,7 @@ class AgentRun:
         autonomy = self._autonomy()
         self._emit({"type": "tool_call", "tool": name, "args": _trim(args, 2000)})
         if autonomy == "readonly" and destructive:
+            audit("denied", f"{name} {_short(args)} (readonly)")
             result = {"error": "agent is in read-only mode; ask the user to switch to Confirm or Autopilot"}
             self._emit({"type": "tool_result", "tool": name, "ok": False, "result": result})
             return result

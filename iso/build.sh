@@ -3,7 +3,7 @@
 #  THADD OS — ISO build driver
 # =============================================================================
 #  Turns the repository into a bootable, hybrid (BIOS + UEFI) live ISO that
-#  runs identically in VirtualBox, VMware, QEMU/KVM and on bare metal.
+#  is intended for VirtualBox, VMware, QEMU/KVM and bare-metal testing.
 #
 #  Usage:
 #      sudo ./iso/build.sh                    # full build -> dist/*.iso
@@ -392,7 +392,7 @@ if (( SIZE_MB > 1900 )); then
 fi
 
 cat > "$DIST_DIR/RELEASE-NOTES.md" <<EOF
-## THADD OS ${VERSION} "${CODENAME}" — amd64 live/installable ISO
+## THADD OS ${VERSION} "${CODENAME}" — amd64 live ISO
 
 - Profile: \`${PROFILE}\`
 - Size: ${SIZE_MB} MiB
@@ -430,15 +430,21 @@ $(if (( SIZE_MB > 1900 )); then cat <<SPLIT
 GitHub caps one release asset at 2 GiB, so this image is uploaded in parts.  Join
 them before booting:
 
-  cat $(basename "$ISO_OUT").part-* > $(basename "$ISO_OUT")
   sha256sum -c parts.sha256
+  cat $(basename "$ISO_OUT").part-* > $(basename "$ISO_OUT")
+  sha256sum -c $(basename "$ISO_OUT").sha256
+
+Download EVERY numbered part for this image from the SAME release. They are
+pieces of one ISO, not separate bootable images. Do not extract or rename a
+part to .iso. Keep space for both parts and reconstructed ISO. See the repository
+QUICKSTART guide for Windows CMD joining and native PowerShell checksums.
 
 SPLIT
 fi)
 Boot it (VirtualBox, EFI)
   VBoxManage createvm --name "THADD OS" --ostype Debian_64 --register
   VBoxManage modifyvm  "THADD OS" --memory 4096 --cpus 2 --vram 128 \
-      --graphicscontroller vmsvga --firmware efi --accelerate3d on
+      --graphicscontroller vmsvga --firmware efi --accelerate3d off
   VBoxManage storagectl  "THADD OS" --name "SATA" --add sata --controller IntelAhci --portcount 2
   VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 0 --device 0 \
       --type dvddrive --medium "$PWD/$(basename "$ISO_OUT")"
@@ -451,8 +457,9 @@ Inside
   rea --help             the same tool directly
   /usr/share/doc/thadd/  QUICKSTART · SECURITY · AI · FORENSIC_SCAN · REA
 
-Live media keeps every change in RAM: install to disk from the desktop, or boot
-with the THADD-PERSISTENCE volume to keep changes across reboots.
+Live changes are temporary unless you prepare and test separate persistence
+storage. A blank VM disk alone does not enable persistence. Debian Installer is
+disabled in this build; no confirmed desktop installation workflow is supplied.
 
 How this build was checked
   The image is unpacked and read back — boot menus, kernel, initramfs, the shipped

@@ -10,6 +10,9 @@ on:
     paths:
       - "thadd/**"
       - "iso/**"
+      - "os/usr/local/bin/**"
+      - "scripts/tests/**"
+      - "scripts/record-vm.sh"
       - ".github/workflows/thadd-tests.yml"
 
 permissions:
@@ -75,6 +78,11 @@ jobs:
           # compile it by hand and require the version banner to answer.
           python3 -c "import py_compile,sys; py_compile.compile('reverse-engineering/rea', doraise=True)"
           ./reverse-engineering/rea --version
+
+      - name: Documented CLI wrappers and offline approval regressions
+        run: |
+          python3 scripts/tests/test_documented_interfaces.py
+          bash -n scripts/record-vm.sh
 
       - name: The assistant's entry point actually works
         run: python3 ai/test_ai.py

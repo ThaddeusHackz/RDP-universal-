@@ -1,228 +1,212 @@
-<p align="center">
-  <img src="cloud/web/logo.png" alt="THADD OS" width="132" />
-</p>
+<p align="center"><img src="cloud/web/logo.png" alt="THADD OS logo" width="110"></p>
 
-<h1 align="center">THADD OS</h1>
+# THADD OS
 
-<p align="center"><strong>One OS. All the Best.</strong><br/>
-<em>A complete operating system — a bootable live ISO, a browser desktop, an RDP/cloud
-workstation, a security lab, an AI operator and a forensics workbench — in one repository.</em></p>
+**A Debian-based live desktop, experimental Linux live-image tooling, and a browser/cloud workstation project—not a new kernel.** THADD combines Linux and Debian userland with XFCE, a custom web desktop, Python OS services, an AI assistant and security/forensics utilities.
 
-<p align="center">
-  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-iso.yml"><img alt="THADD OS ISO" src="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-iso.yml/badge.svg"></a>
-  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-os-ci.yml"><img alt="THADD OS CI" src="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-os-ci.yml/badge.svg"></a>
-  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases"><img alt="Download the ISO" src="https://img.shields.io/badge/download-.iso%20releases-3b82f6"></a>
-  <img alt="Boot" src="https://img.shields.io/badge/boot-UEFI%20%2B%20BIOS%20%2F%20CSM-0ea5e9">
-  <img alt="Base" src="https://img.shields.io/badge/base-Debian%2012%20%2B%20own%20userland-d70a53">
-  <img alt="Desktop" src="https://img.shields.io/badge/desktop-Windows%2011%20%C3%97%20macOS%20Sequoia-8b5cf6">
-  <img alt="Methods" src="https://img.shields.io/badge/RPC%20methods-105-22c55e">
-</p>
+> **Start here:** [Download and join the desktop ISO](docs/QUICKSTART.md#1-download-the-desktop-image), then [try it safely in VirtualBox](docs/QUICKSTART.md#3-create-a-virtualbox-vm). Download **all three numbered parts from the same release**. They are pieces of **one** image, not bootable ISOs. Do not extract them or rename a part to `.iso`.
+>
+> **Evidence status (2026-10-15):** release metadata and source interfaces reviewed; no real desktop VM boot performed in this environment. The required five-minute real-VM video and new footage-derived GIF are **outstanding**, not replaced by the existing rendered demo. [Blocker, checklist and runnable recording procedure](docs/VM-TESTING.md).
 
----
+## Contents
 
-## ⬇️ Get THADD OS
+- [What it is and how it looks](#what-it-is-and-how-it-looks)
+- [Versions, architectures and downloads](#versions-architectures-and-downloads)
+- [Hardware and VM resources](#hardware-and-vm-resources)
+- [Login and safe use](#login-and-safe-use)
+- [Applications and availability](#applications-and-availability)
+- [Command-line quick reference](#command-line-quick-reference)
+- [AI setup and limitations](#ai-setup-and-limitations)
+- [Live sessions, persistence and installation](#live-sessions-persistence-and-installation)
+- [Screenshots, GIF and video](#screenshots-gif-and-video)
+- [Troubleshooting and diagnostics](#troubleshooting-and-diagnostics)
+- [Build and CI](#build-and-ci)
+- [Licensing, credits and guides](#licensing-credits-and-guides)
 
-| Disc | What it is | Built by |
+## What it is and how it looks
+
+There are distinct systems in this repository; screenshots or tests of one do not prove another works.
+
+| Component | Implementation and role |
+| --- | --- |
+| **Full desktop ISO** | `iso/`: Debian 12 **bookworm**, Linux amd64, live-build, squashfs + live-boot overlay; hybrid BIOS/UEFI configuration (Secure Boot disabled). |
+| **Native desktop** | Xorg, LightDM, XFCE/xfwm4, Thunar, Plank dock, picom compositor, Arc/Papirus themes. Windows 11/macOS-inspired styling is not Windows or macOS compatibility. |
+| **Custom desktop** | `desktop/` bundled JavaScript shell plus `os/usr/local/bin/thadd-desktop-server` bridge; `thadd/shell/` is the Python-service-served shell. Web windows and app launchers do not establish native package availability. |
+| **OS services** | `thadd/server/`: Python HTTP/WebSocket/RPC APIs, PTYs, settings, snapshots, AI tools. |
+| **AI and forensics** | `thadd/server/ai/`, `thadd/forensics/`, `security/thadd-scan`, `reverse-engineering/rea`: local operations, triage and artefact reports. These are not guarantees of malware detection or complete filesystem support. |
+| **Experimental minimal ISO** | `thadd/boot/`: custom UEFI loader and Python FAT/cpio/ISO construction around a Linux kernel and staged userland. Separate boot path, not a small edition of the Debian XFCE desktop. |
+| **Cloud workstation** | `Dockerfile`, `cloud/`, `scripts/`: Debian/XFCE, RDP and browser/noVNC access. A container shares the host kernel; it does not test ISO firmware boot. |
+
+The intended native layout is a top panel/application menu and bottom dock, with themed windows. The custom shell provides its own launcher, windows, settings and assistant. See the [desktop quick start](docs/QUICKSTART.md); runtime desktop integration remains to be tested in a real VM.
+
+## Versions, architectures and downloads
+
+[**Current release: v1.6 — THADD OS 1.6**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases/tag/v1.6), checked 2026-10-15. Release tag, desktop build date and minimal-image version are different identifiers:
+
+| Actual asset | Purpose / size |
+| --- | --- |
+| `THADD-OS-2026.10.14-aurora-amd64.iso.part-00` | Desktop part 1: 1,992,294,400 bytes |
+| `THADD-OS-2026.10.14-aurora-amd64.iso.part-01` | Desktop part 2: 1,992,294,400 bytes |
+| `THADD-OS-2026.10.14-aurora-amd64.iso.part-02` | Desktop part 3: 1,914,388,480 bytes |
+| `parts.sha256` | Checksums of the desktop pieces |
+| `RELEASE-NOTES.md` | Release attachment; read before booting |
+| `THADD-OS-1.0-x86_64.iso` | **Separate minimal experimental ISO**, 77,848,576 bytes (about 78 MB); not the full desktop |
+| `THADD-OS-1.0-x86_64.iso.sha256`, `manifest.json` | Minimal-image integrity/metadata; do not use its checksum for the desktop |
+
+The reconstructed desktop filename is **`THADD-OS-2026.10.14-aurora-amd64.iso`**, 5,898,977,280 bytes (about 5.90 GB / 5.49 GiB), codename **aurora**. Only **amd64/x86_64** images are published; ARM/Apple Silicon native boot and 32-bit x86 are not supported by these assets. Source fallbacks may show `1.0` / `Nebula Prime`; use `/etc/thadd/build-info` and `thadd version` for the running image's identity.
+
+**There is no desktop `.iso.sha256` attachment listed in v1.6.** Download it if the maintainer adds one; do not invent a checksum or borrow one from another build. The [download guide](docs/QUICKSTART.md) includes exact Windows CMD joining, native PowerShell hashing and Linux commands, storage requirements and separate whole-image verification. Release asset bytes could not be retrieved here because the redirected download host is blocked.
+
+## Hardware and VM resources
+
+Conservative **initial test configuration**, not measured hardware minima: x86_64 CPU with VT-x/AMD-V for a responsive VM, **4 GB guest RAM minimum**, **8 GB recommended** if the host has sufficient spare memory, **2 vCPUs**, and a **40 GB dynamically allocated virtual disk**. Leave memory/CPU for the host. Budget at least **12 GB free just for desktop parts + joined ISO**, plus VM disk growth and recordings; FAT32 cannot hold the reconstructed file.
+
+VirtualBox: **Linux → Debian (64-bit)**, skip unattended installation, EFI on, VMSVGA, 128 MB video RAM, **3D off initially**, NAT. Attach the **joined ISO**, not a numbered part. [Full beginner steps](docs/QUICKSTART.md#3-create-a-virtualbox-vm). Guest integration packages are optional; resizing/shared folders/3D are not universally verified. Physical GPU, Wi-Fi, firmware and laptop support need hardware-specific tests.
+
+## Login and safe use
+
+The desktop build source sets user **`thadd`**, public password **`thadd`**, with LightDM autologin (`0200-thadd-identity` and `0350-thadd-shell` hooks). This is **source-confirmed, not a login observed in a released VM here**. These credentials are not a claim about the experimental minimal or cloud images.
+
+Immediately run **`passwd`** as `thadd` and choose a unique password privately. Autologin bypasses a login prompt; changing the password does not disable autologin. In a nonpersistent live session this change is lost on reboot. Never show the new password, API keys or private files in recordings.
+
+Use NAT, avoid bridged networking and port forwarding initially, and do not expose RDP, VNC, SSH or web bridges to untrusted networks. Inspect actual listeners with `ss -lntup` and security status with `thadd security`; installed packages/configuration do not prove protections are active. Never scan third-party targets without permission. AI runs with your privileges; avoid root. See [security configuration and cautions](docs/SECURITY.md).
+
+## Applications and availability
+
+**Status vocabulary:** “core” means required by source package lists, not runtime-tested here; “optional” means attempted by tolerant hooks and may be skipped; “unavailable” requires a negative result for that build; “unverified” means no matching runtime evidence. There is no evidence for “every browser” or “all tools.”
+
+| Category | Core/build-required | Optional / best effort / unverified for v1.6 runtime |
 | --- | --- | --- |
-| **`THADD-OS-1.0-x86_64.iso`** (78 MB) | The THADD live system: own boot chain, own userland, the THADD service (105 RPC methods), forensic engine, AI operator and the desktop shell. UEFI. | `thadd/boot/*` — pure Python, no xorriso/mtools/live-build |
-| **`THADD-OS-<version>-aurora-amd64.iso`** (~5.6 GB) | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion; **Firefox ESR, Chromium, Chrome, Edge, Brave, Epiphany, qutebrowser, Falkon, Tor Browser, w3m, lynx**; the dev toolchain (gcc, git, node/npm, Python, **VS Code**, **PowerShell 7**); the Parrot/HTB-class security and forensics sets (**Metasploit, nmap, sqlmap, hydra, aircrack-ng, hashcat, John, bettercap, mitmproxy, impacket, wireshark, sleuthkit, binwalk**, …); plus the in-OS AI assistant and forensic scanner. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
+| Desktop/apps | XFCE, Thunar, Mousepad, Evince, Ristretto, VLC, mpv, archive tools, NetworkManager | LibreOffice, GIMP, Blender, Calibre, Thunderbird, Remmina, qBittorrent, OBS |
+| Browsers | **Firefox ESR, Chromium** | Epiphany, qutebrowser, Falkon, w3m/lynx/links2; Tor **launcher** is not a predownloaded Tor Browser; Chrome, Edge, Brave via vendor hook |
+| Development | Git, Python 3, pip/venv, nano, vim-tiny | gcc/g++, make, clang, gdb, strace, Node/npm, Go, Rust, Java, Docker, VS Code (`code`), PowerShell (`pwsh`) |
+| Terminals/shells | xfce4-terminal, Bash, tmux, screen | zsh, fish, alternate terminals, PowerShell; Python/Node REPLs are not terminal emulators |
+| Security | THADD command sources staged | nmap, Wireshark/tshark, tcpdump, sqlmap, hydra, aircrack-ng, hashcat, John, mitmproxy, impacket; Metasploit via vendor hook; AppArmor/auditd/ufw/fail2ban also need runtime service checks |
+| Forensics/RE | `rea`, THADD scanner and Python DFIR source staged | Sleuth Kit, binwalk, testdisk, YARA, exiftool, radare2/rizin/Ghidra/Volatility depend on package availability; not guaranteed installed |
 
-Both are attached to every [**Release**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases)
-by CI, which builds them from source on every run. The desktop image is larger than GitHub's 2 GiB
-per-asset limit, so it ships as `*.part-00`, `*.part-01`, … plus a `parts.sha256` — rejoin it with:
+[Required lists](iso/config/package-lists/), [optional package requests](iso/config/packages/) and [third-party hook](iso/config/hooks/normal/0450-thadd-thirdparty-tools.hook.chroot) are the source of intent. Opera/Vivaldi and proprietary IDA/Hopper are **not guaranteed supplied**; a name in an optional list does not make it available in Debian. Inspect the guest:
 
 ```bash
-cat THADD-OS-*-aurora-amd64.iso.part-* > thadd-os.iso
-sha256sum -c parts.sha256
+thadd-toolbox --status
+cat /usr/share/thadd/apt-safe-report.txt
+command -v firefox-esr chromium code pwsh msfconsole nmap wireshark rea
+# Confirm a particular Debian package, not just a launcher:
+dpkg-query -W -f='${Status}\n' firefox-esr
 ```
 
-**Use `v1.4` or newer.** Earlier releases were published while `iso/verify.sh` was broken — the file
-had lost its executable bit, CI skipped it, and the one run that did reach it had its verdict thrown
-away by a `tee` pipeline. They are marked as pre-releases and say so on the release page.
+The [latest committed verification report](docs/reports/desktop-iso-verify.md) concerns a **2026.10.15** ISO at commit `d383e3929c1c2477b4e92e9b38ae9914d003c2bc`, **not necessarily the 2026.10.14 release image**. It verifies contents, not a real VM session. Missing software should be reported as missing/unavailable for the tested image, not silently advertised as installed.
 
-### Boot it in VirtualBox
+## Command-line quick reference
 
-1. **New VM** → Type *Linux*, Version *Other Linux (64-bit)*, RAM **2 GB+**, disk: none needed (live).
-2. **Settings → System → Motherboard → ✅ Enable EFI** — the from-scratch ISO is UEFI-only.
-   *(The desktop ISO also boots on legacy BIOS/CSM, so you can leave EFI on either way.)*
-3. **Settings → Storage** → attach the `.iso` to the optical drive.
-4. Start. The THADD loader prints every step to the firmware console, then hands over to Linux.
-5. Optional but recommended: **Settings → Network → Adapter 1 → Advanced → Port Forwarding**,
-   add host `8080` → guest `8080`. The full GUI shell is then on **your** browser at
-   <http://127.0.0.1:8080>.
-
-Nothing on the discs writes to your disks unless you ask it to.
-
----
-
-## 🎬 THADD OS in motion
-
-<video src="docs/media/thadd-os-demo.mp4" controls muted playsinline width="100%"></video>
-
-▶ **[`docs/media/thadd-os-demo.mp4`](docs/media/thadd-os-demo.mp4)** — 1280×720 H.264, 49 s, 1.2 MB,
-31 scenes: boot splash → lock screen → desktop → launcher → AI operator → terminal →
-PowerShell → files → editor → security centre → forensic lab → task manager → settings →
-app store → snapshots → recorder → media → multi-window → VMs → productivity suite.
-
-Every frame is rendered from the same code that draws the shell
-(`thadd/server/video.py`), so the video, the gallery below and the ISO stay in sync:
-`python3 -c "from thadd.server import video; video.render_demo()"`.
-
-### Live desktop gallery — 31 snapshots
-
-|  |  |  |
-| --- | --- | --- |
-| ![boot](docs/snapshots/01-boot-splash.png) | ![services](docs/snapshots/02-boot-services.png) | ![lock](docs/snapshots/03-lock-screen.png) |
-| ![desktop](docs/snapshots/04-desktop.png) | ![launcher](docs/snapshots/05-launcher.png) | ![ai search](docs/snapshots/06-launcher-ai-search.png) |
-| ![control centre](docs/snapshots/07-control-center.png) | ![notifications](docs/snapshots/08-notification-center.png) | ![ai chat](docs/snapshots/09-ai-agent-chat.png) |
-| ![ai done](docs/snapshots/10-ai-agent-complete.png) | ![terminal](docs/snapshots/11-terminal-neofetch.png) | ![powershell](docs/snapshots/12-powershell.png) |
-| ![files](docs/snapshots/13-files.png) | ![editor](docs/snapshots/14-code-editor.png) | ![security](docs/snapshots/15-security-center.png) |
-| ![scan](docs/snapshots/16-security-scan-live.png) | ![forensics](docs/snapshots/17-forensics-lab.png) | ![dfir](docs/snapshots/18-dfir-cross-os.png) |
-| ![taskmgr](docs/snapshots/19-task-manager.png) | ![monitor](docs/snapshots/20-system-monitor.png) | ![appearance](docs/snapshots/21-settings-appearance.png) |
-| ![ai settings](docs/snapshots/22-settings-ai.png) | ![store](docs/snapshots/23-app-store.png) | ![installing](docs/snapshots/24-app-store-installing.png) |
-| ![snapshots](docs/snapshots/25-snapshots.png) | ![recorder](docs/snapshots/26-screen-recorder.png) | ![media](docs/snapshots/27-media-player.png) |
-| ![multi window](docs/snapshots/28-multi-window.png) | ![vms](docs/snapshots/29-vms-windows-macos.png) | ![productivity](docs/snapshots/30-productivity-suite.png) |
-
-…and `docs/snapshots/31-endcard.png` closes the set. All 31 files are in
-[`docs/snapshots/`](docs/snapshots) at 1600×900, PNG.
-
----
-
-## 🧠 What is inside
-
-```
-                 ┌────────────────────────────── THADD OS ──────────────────────────────┐
-  firmware ──▶   │  UEFI loader   →  Linux kernel  →  live userland  →  the OS services  │
-                 │  \EFI\BOOT\      \boot\vmlinuz    own initramfs      thadd server     │
-                 │  BOOTX64.EFI     \boot\initrd.img  (PID 1: /init)   desktop shell    │
-                 └──────────────────────────────────────────────────────────────────────┘
-```
-
-| Layer | Where | What it does |
-| --- | --- | --- |
-| **Boot & ISO** | `thadd/boot/` | Freestanding PE32+ UEFI loader, FAT16 writer, newc cpio writer, rootfs stager, ISO 9660 + El Torito assembler. Pure Python + gcc. |
-| **Service** | `thadd/server/` | HTTP + WebSocket core, `Registry`/`EventBus`/`Stream`, **105 RPC methods**, REST mirror, real PTYs, snapshots, settings. |
-| **Desktop shell** | `thadd/shell/` | The GUI: menubar, dock, launcher (⌘K), windows, notifications, 38 apps. |
-| **Security** | `thadd/forensics/` | Dependency-free read-only readers for **MBR/GPT, ext4, NTFS ($MFT, ADS, deleted records), HFS+, APFS, FAT/exFAT and Windows registry hives**, plus a triage engine that reverse-engineers an OS from a disk. |
-| **Reverse engineering** | `reverse-engineering/` | `rea` — identify an artefact, read its containers (ZIP/tar/ar/deb/ASAR), pull interesting strings, and write an agent-ready report. Standard library only, online or offline; the method follows morluto/rea. |
-| **AI operator** | `thadd/server/ai/` | Groq-backed agent with ~25 OS tools, approval gates, JSONL audit log, saved conversations — and a fully offline fallback assistant. |
-| **Cloud / RDP** | `cloud/`, `desktop/`, `scripts/` | The other face of THADD OS: a Debian 12 + XFCE workstation in the cloud, reachable from any browser (noVNC) and from any RDP client on port 3389, with the web portal in `cloud/web/`. |
-| **Desktop ISO** | `iso/` | live-build pipeline that turns the repo into a hybrid BIOS+UEFI Debian-live ISO with the XFCE fusion desktop and real browsers/tooling. |
-
-**Terminals** bash · zsh · fish · PowerShell (`pwsh`) · python · node · sqlite
-**Toolchain** gcc/g++, make, git, python3 + pip, node + npm, nano/vim, tar/xz/zip, openssl, curl
-**In the live system** `thadd` (control centre: `thadd doctor`, `thadd security`, `thadd status`, `thadd dfir /dev/sdX`), `thadd-ai` (assistant), `thadd-toolbox` (optional tool sets on demand), `thadd-ssh`, shells on `tty1`/`tty2` and the serial line
-**Hidden gems** macOS-style ⌘K spotlight with AI search, Windows-style task manager and notification centre,
-Linux power tools, `Ctrl+Alt+F2` break-glass shell, `sysrq` recovery, live forensic triage of any disk.
-
----
-
-## 🔍 Verified before shipping
-
-The repository does not trust the ISOs — it proves them, on every push:
-
-| Check | Where |
-| --- | --- |
-| The loader runs against **two mock firmwares** and every handover check passes (protocol 2.15, `boot_params` ramdisk fields, `rdinit=/init`): one with a filesystem, one that exposes **only raw blocks** — in which case the loader parses ISO 9660 itself and pulls the kernel and initramfs off the disc **byte-identically** | `thadd/boot/tests/run_loader_test.py` |
-| The staged userland **actually runs**: Python 3.11 in a chroot imports, Pillow renders text with DejaVu fonts | `thadd/boot/stage_rootfs.py` + `chroot` |
-| The THADD service **boots inside that guest userland** — `/healthz`, `system.info`, 105 methods registered | `python3 -m thadd.server` |
-| Every file extracted from the finished ISO is **hash-identical** to its source; the El Torito entry is spec-correct (platform `0xEF`, no-emulation, 4,152 sectors) | `thadd-iso.yml` → *Verify the disc* |
-| The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
-| The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
-| The gallery and the demo video still render on a clean machine — at the full design size **and** down-scaled, so no scene can overflow its own window | `thadd-tests.yml` |
-| The desktop-ISO **build driver** runs against a stub live-build: the configuration in `iso/auto/config` is proven to reach `lb config`, and a wrong suite, a main-only archive area or a lost bootloader set is refused in seconds instead of after 45 minutes | `iso/tests/test_build_sh.py` |
-| The **finished desktop ISO is read back**: ISO 9660 + hybrid MBR + El Torito (BIOS **and** EFI) boot records, the ISO layout file by file, the squashfs inventory, and the contents the OS promises — THADD identity, the XFCE/`picom`/LightDM stack, `thadd-shell-session`, the AI agent loop and its tool registry, the DFIR engine, `thadd-scan`, browsers, the security toolchain, and the verdict of the image's **own** self-test. `0 failure(s)` or the build is not published | `iso/verify.sh` → `docs/reports/desktop-iso-verify.md` |
-| The image **tests itself from the inside** during the build (every check passing in the current release — read `/etc/thadd/selfcheck.txt` for the number) and that verdict is read back out of the shipped squashfs | `desktop/thadd-desktop-selftest` → `/etc/thadd/selfcheck.txt` |
-| The **optional package sets** report what they did, and the verification fails if fewer than four of the seven ran — the tolerant installer writes its report into the image precisely so "did the security/dev/forensics/browser tooling actually install?" is answerable, and packages Debian does not ship (Metasploit and PowerShell come from Rapid7's and Microsoft's own repositories; radare2 is not packaged for Debian 12) are named instead of quietly missing | `tools/bin/thadd-apt-safe`, `iso/config/hooks/normal/0450-thadd-thirdparty-tools.hook.chroot` |
-| The verifier is tested in **both directions**: a broken ISO must be refused (and `build.sh` must die rather than publish it), and a healthy synthetic ISO must come back `RESULT: SHIPPABLE` | `iso/tests/test_build_sh.py` (56 checks) |
-
-![THADD OS desktop, captured over a real RDP session inside CI](ci/thadd-os-screenshot.jpg)
-
-*Not a mock-up: this is the running THADD OS desktop, screenshotted over an RDP login inside the CI
-runner and pushed back into the repository by `thadd-os-ci.yml` on every boot test.*
-
-The kernel and initramfs are kept on the ISO 9660 volume rather than in the El Torito boot image,
-because that image's size is a 16-bit field in the boot catalog (32 MB ceiling). To make that safe on
-firmwares that do **not** mount a CD's ISO 9660 volume, the loader reads the disc's blocks directly
-with its own ISO 9660 parser — fallback order: any SimpleFileSystem volume first, then raw blocks.
-Firmware 2 above is that exact scenario, tested on a real ISO built by the same code as the shipped one.
-
-**Honest limits.** No hypervisor exists on the build host, so neither ISO has been *booted* here:
-the from-scratch loader is proven against two mock firmwares (the handover contract, byte-identical
-kernel/initramfs reads), and the desktop ISO is proven structurally — boot records, ISO layout,
-squashfs contents, kernel and initramfs — plus by the image's own self-test running inside its
-chroot during the build. Nothing in this repository claims an observed VirtualBox boot. The
-Debian-live desktop ISO carries the heavyweight stack (browsers, the security and dev sets, office,
-IDEs) because it installs them from apt during its build; that is also why it is ~5.6 GB and shipped
-in three parts. Packages that have vanished from a Debian
-release are logged and skipped by `thadd-apt-safe` rather than failing the build — the verification
-report lists exactly which ones, and it is why the installer's own report is shipped inside the
-image: PowerShell and Metasploit come from Microsoft's and Rapid7's repositories, Chrome, Edge,
-Brave and VS Code from their vendors', and radare2 simply is not packaged for Debian 12 (it and
-Opera, Vivaldi, Slack, Discord, Zoom and Spotify are named in the report as not installed rather
-than quietly missing).
-
----
-
-## 🛠 Build it yourself
+Interfaces checked against current scripts/help. Commands below target the desktop guest; health checks on a generic checkout host are not OS acceptance tests.
 
 ```bash
-# the from-scratch ISO (pure Python + gcc, no root, ~1 minute)
-python3 thadd/boot/build_bootloaders.py                              # -> build/boot/BOOTX64.EFI
-python3 thadd/boot/tests/run_loader_test.py                          # mock-firmware test
-python3 thadd/boot/stage_rootfs.py build/live/rootfs                 # ~96 MB userland
-python3 thadd/boot/mkinitramfs.py build/live/rootfs build/iso/boot/initrd.img.gz
-python3 -m thadd.boot.assemble_iso                                   # -> build/iso/THADD-OS-1.0-x86_64.iso
-
-# run the service + shell on this machine
-python3 -m thadd.server --host 0.0.0.0 --port 8080 --shell thadd/shell
-
-# the Debian-live desktop ISO (needs live-build/xorriso, ~20 min)
-sudo apt-get install live-build debootstrap xorriso squashfs-tools mtools dosfstools rsync
-sudo python3 iso/tests/test_build_sh.py                              # prove the driver first (~1 s)
-sudo ./iso/build.sh                                                  # -> dist/THADD-OS-*.iso
-
-# the media in this README
-python3 -c "from thadd.server import video; video.render_demo()"     # gallery + MP4
-python3 thadd/server/tests/test_render.py                            # ...and prove it renders
+thadd help
+thadd version
+thadd status
+thadd doctor                 # advisory; a zero exit code is not an all-pass verdict
+thadd security
+thadd scan --summary         # delegates to thadd-scan
+thadd-ai --help
+thadd-ai doctor
+thadd-ai selftest
+thadd-ai tools
+thadd-ai --autonomy readonly ask "list files in /tmp"
+thadd-scan --help
+thadd-scan --quick --summary  # running-system snapshot, not an antivirus guarantee
+thadd-scan --quick --out /tmp/thadd-evidence
+thadd-toolbox --list
+thadd-toolbox --status
+thadd-toolbox --dry-run dev   # inspect requests; does not install
+# Optional, needs repositories/network/root and enough overlay storage:
+# sudo thadd-toolbox dev
 ```
 
-CI runs all of it on every push: [`thadd-iso.yml`](.github/workflows/thadd-iso.yml) builds and
-publishes the live ISO, [`iso-build.yml`](.github/workflows/iso-build.yml) builds the desktop ISO,
-[`thadd-os-ci.yml`](.github/workflows/thadd-os-ci.yml) boots the cloud OS and logs into it over RDP.
+Harmless single-file analysis (never execute an unknown artefact):
 
----
+```bash
+case_dir=$(mktemp -d /tmp/thadd-case.XXXXXX)
+printf 'Harmless THADD acceptance fixture\n' > "$case_dir/fixture.txt"
+rea --identify "$case_dir/fixture.txt"
+rea --strings "$case_dir/fixture.txt"
+rea --report --out "$case_dir/report.md" "$case_dir/fixture.txt"
+thadd rea --identify "$case_dir/fixture.txt"
+# For an authorized disposable disk IMAGE, not your real host disk:
+# thadd-scan --device /path/to/test.img
+# thadd dfir /path/to/test.img
+```
 
-## 📚 Documentation
+See [`rea` guide](reverse-engineering/README.md) and [forensic method](FORENSIC_SCAN.md). Scanner reports can contain usernames, listeners, paths and other sensitive evidence: review before publishing.
 
-Three guides ship inside the image (`/usr/share/doc/thadd/`) and live in `docs/`:
+## AI setup and limitations
 
-| Guide | For |
+`thadd-ai` is a Python assistant with real filesystem, shell, package, service and desktop tools. **No key → deterministic offline helper**, not a bundled general-purpose local language model. It can list/read/hash/analyse files and gather system facts; cloud reasoning requires connectivity and an endpoint/model that is available to your account.
+
+For Groq, enter a key privately in Settings → AI, or in Bash without placing the literal key in shell history:
+
+```bash
+read -rsp 'Groq API key: ' GROQ_API_KEY; echo
+export GROQ_API_KEY
+thadd-ai doctor
+thadd-ai --autonomy readonly ask "Explain this system's memory usage"
+unset GROQ_API_KEY
+```
+
+Do this **off camera**. Environment variables are not a secret vault. `unset` does not remove a key saved in settings. Do not use the `--key` flag on shared machines (process arguments may expose it). Cloud prompts/tool results may leave the machine.
+
+Modes are `readonly`, `confirm` (default) and `autopilot`. Confirm prompts may offer `a` to switch to autopilot: **do not select it for the demonstration**. Approval gates/blocklists are not an OS sandbox; snapshots cover configured paths, not entire disks. Offline safety behavior in older releases must not be assumed identical to the current checkout. [Detailed setup, audit paths and safety limitations](docs/AI.md).
+
+## Live sessions, persistence and installation
+
+A normal live boot uses squashfs plus a temporary overlay: files, package installs, logs and password changes may disappear at shutdown. **Creating a VM disk alone does not make a live session persistent.** Save selected work to a deliberately mounted disposable disk/shared folder and verify it after reboot.
+
+Source enables Debian live-boot persistence discovery with label **`THADD-PERSISTENCE`**. Persistence needs an appropriately prepared volume and `persistence.conf`; it is **not configured merely by downloading the ISO**, and runtime persistence has not been tested here. Do not repartition the host just to try the VM.
+
+**No confirmed end-user installer:** `iso/auto/config` explicitly uses `--debian-installer none`; no working desktop installation path was established. Do not follow older instructions invoking `debian-installer-launcher` or promise a dedicated “Persistence” menu entry. Use a VM live session for evaluation. [Persistence/installation boundaries](docs/QUICKSTART.md#5-live-data-and-installation).
+
+## Screenshots, GIF and video
+
+[![Cloud XFCE/RDP desktop capture—not an ISO boot](ci/thadd-os-screenshot.jpg)](ci/thadd-os-screenshot.jpg)
+
+Above: repository cloud/RDP CI screenshot, not evidence of a desktop ISO boot. The [snapshot gallery](docs/snapshots/) and [existing 49-second MP4](docs/media/thadd-os-demo.mp4) are **programmatically rendered illustrations** (`thadd/server/video.py`), not real VM footage or acceptance results.
+
+**New real-footage GIF: outstanding. Five-minute real-VM MP4: outstanding.** There is no uploaded full-video URL or hosting claim yet. Use the [recording procedure](docs/VM-TESTING.md) to capture actual VM output, validate duration/encoding, generate an optimized GIF, then publish the MP4 as a GitHub Release asset and embed the GIF as a linked image. A Markdown thumbnail/link works on GitHub; arbitrary HTML `<video>` is not relied on here. Do not label generated scenes as testing footage.
+
+## Troubleshooting and diagnostics
+
+| Symptom | Checks / safe next step |
 | --- | --- |
-| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | booting it in VirtualBox, logging in, the keyboard map, what is installed, what to do when a screen stays black |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | every control the image applies — sysctl, AppArmor, auditd, ufw, sshd-off, sudo logging, password quality — and how to inspect or undo each one |
-| [`docs/AI.md`](docs/AI.md) | the in-OS assistant: Groq/OpenAI-compatible/offline modes, the 35 tools, the approval gate and the audit log |
+| ISO won't attach/boot | Confirm all three parts, exact names/date, `parts.sha256`, joined size and optional whole-image checksum. Never attach `.part-00`. |
+| EFI/boot issue | Check EFI enabled and Secure Boot disabled; use live menu entry `live-amd64` (normal **Live**, usually “Live system (amd64)”). Exact displayed wording depends on generated menu; inspect its kernel parameters for `boot=live`. |
+| Black/slow graphics | VMSVGA, 128 MB VRAM, 3D off; try failsafe (`live-amd64-failsafe`) and inspect its parameters. Source failsafe includes `nox11`, so it may give a console rather than a desktop; it is not a verified `nomodeset` desktop mode. |
+| No network | `nmcli device status`, `ip addr`, `ip route`, `resolvectl status` if present; NAT adapter enabled/cable connected. Restricted networks may block vendors/Groq. |
+| Missing packages | `thadd-toolbox --status`, installer report, `/var/log/thadd/apt-safe.log`; inspect logs for skipped/unresolvable names. |
+| Assistant doesn't reason | `thadd-ai doctor`, configured endpoint/model/key, connectivity; offline helper is intentionally limited. |
+| Desktop/service problem | `thadd doctor`, `thadd-desktop-selftest`, `journalctl -b -p warning`, `systemctl --failed`, `free -h`, `df -h`, `ss -lntup`. |
+| Lost work after reboot | Expected without tested persistence/external storage; a blank VDI is not automatic persistence. |
 
-## 📂 Repository map
+Known limitations: no real-VM/hardware acceptance run here, optional dependencies may be missing, graphics/guest integration unverified, no confirmed installer, no desktop whole-image hash asset in current release, source/report/release dates differ, minimal-image features must not be inferred from desktop packages. Checksums detect byte changes but do not authenticate a publisher without a trusted signed channel. Preserve exact ISO filename/hash/commit and sanitized logs when [reporting an issue](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/issues).
 
+## Build and CI
+
+See [build-from-source guide](docs/BUILDING.md). On a suitable privileged amd64 Debian/Ubuntu host with network access:
+
+```bash
+sudo bash iso/build.sh --profile desktop
+(cd dist && sha256sum -c THADD-OS-*.iso.sha256)
 ```
-thadd/            the OS itself: boot/ (loader + ISO builders), server/ (105 methods, AI),
-                  shell/ (desktop), forensics/ (disk readers + triage)
-iso/              live-build pipeline for the Debian-live desktop ISO
-cloud/            the cloud/RDP deployment: xrdp, XFCE skin, noVNC portal, Railway config
-desktop/          the browser desktop shell used by the cloud portal
-tools/            helper scripts, test suites, welcome screens
-scripts/ci/       CI helpers (wait-health, RDP login, screenshot publishing)
-docs/snapshots/   the 31 desktop snapshots above
-docs/media/       the demo video
-FORENSIC_SCAN.md  the forensic method, the CLI, the readers and the tests
-                  (method reference: morluto/rea)
-```
 
-## License & credits
+The actual checksum command must run **inside `dist`** because sidecars contain basenames. Never set `THADD_SKIP_VERIFY=1` for a publishable image. CI/source tests, mocked firmware tests, squashfs inspection, browser tests and cloud RDP login are useful but **not a substitute for booting the released ISO**. [Real-VM checklist and results status](docs/VM-TESTING.md). [This review’s actual local test results](docs/reports/documentation-review-2026-10-15.md).
 
-Built by **ThaddeusHackz**. THADD OS boots a Linux kernel built by
-[gokrazy](https://github.com/gokrazy/kernel.amd64); the desktop ISO is assembled with
-[Debian live-build](https://wiki.debian.org/DebianLive). Everything else — boot chain, userland
-stager, ISO writer, service, shell, forensic engine, AI operator and the media in this README —
-is written from scratch in this repository.
+## Licensing, credits and guides
+
+No top-level `LICENSE` file was found in this checkout. **Do not infer an MIT/GPL license for all project code**; obtain maintainer clarification before reuse/redistribution. Debian packages, Linux, firmware, browsers and vendor tools retain their individual licenses and redistribution/trademark restrictions; inspect `/usr/share/doc/<package>/copyright` and vendor terms. Shipping an optional vendor installer is not a grant of rights.
+
+Upstream foundations include [Debian/live-build](https://live-team.pages.debian.net/live-manual/), [Linux](https://www.kernel.org/), [XFCE](https://xfce.org/), [Xorg](https://www.x.org/), LightDM, Plank, picom, Arc/Papirus, Python, noVNC/xrdp and the individual security/forensics tool authors. `rea` credits the method of [morluto/rea](https://github.com/morluto/rea); this is not a claim that upstream endorses THADD OS. AI cloud service: [Groq](https://groq.com/).
+
+- [Download, Windows/Linux checksums, VirtualBox, login](docs/QUICKSTART.md)
+- [AI configuration, permissions and audit limitations](docs/AI.md)
+- [Security configuration](docs/SECURITY.md) — intended baseline; confirm runtime state
+- [Forensic scanning](FORENSIC_SCAN.md) · [`rea`](reverse-engineering/README.md)
+- [Builds and verification](docs/BUILDING.md) · [real VM recording/test procedure](docs/VM-TESTING.md)
+- [CI workflows](.github/workflows/) · [verification reports](docs/reports/)
