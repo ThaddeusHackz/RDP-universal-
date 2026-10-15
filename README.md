@@ -2,16 +2,32 @@
 
 # THADD OS
 
+<p align="center">
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases/tag/v1.6"><img src="https://img.shields.io/github/v/release/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=blue" alt="Release"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/stargazers"><img src="https://img.shields.io/github/stars/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=yellow" alt="Stars"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/forks"><img src="https://img.shields.io/github/forks/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=green" alt="Forks"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/issues"><img src="https://img.shields.io/github/issues/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=red" alt="Issues"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/commits/main"><img src="https://img.shields.io/github/last-commit/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-?style=for-the-badge&color=purple" alt="Last commit"></a>
+  <img src="https://img.shields.io/badge/platform-amd64%20%2F%20x86__64-lightgrey?style=for-the-badge" alt="Platform">
+  <img src="https://img.shields.io/badge/base-Debian%2012%20bookworm-orange?style=for-the-badge" alt="Base">
+</p>
+
+
 **A Debian-based live desktop, experimental Linux live-image tooling, and a browser/cloud workstation project—not a new kernel.** THADD combines Linux and Debian userland with XFCE, a custom web desktop, Python OS services, an AI assistant and security/forensics utilities.
 
 > **Start here:** [Download and join the desktop ISO](docs/QUICKSTART.md#1-download-the-desktop-image), then [try it safely in VirtualBox](docs/QUICKSTART.md#3-create-a-virtualbox-vm). Download **all three numbered parts from the same release**. They are pieces of **one** image, not bootable ISOs. Do not extract them or rename a part to `.iso`.
 >
 > **Evidence status (2026-10-15):** release metadata and source interfaces reviewed; no real desktop VM boot performed in this environment. The required five-minute real-VM video and new footage-derived GIF are **outstanding**, not replaced by the existing rendered demo. [Blocker, checklist and runnable recording procedure](docs/VM-TESTING.md).
 
+<p align="center"><img src="docs/snapshots/04-desktop.png" alt="THADD OS desktop (rendered illustration)" width="85%"></p>
+<p align="center"><em>Rendered illustration of the intended THADD OS desktop — not evidence of a real ISO boot.</em></p>
+
 ## Contents
 
 - [What it is and how it looks](#what-it-is-and-how-it-looks)
+- [Why THADD OS?](#why-thadd-os)
 - [Versions, architectures and downloads](#versions-architectures-and-downloads)
+- [Quick install (3 parts)](#quick-install-3-parts)
 - [Hardware and VM resources](#hardware-and-vm-resources)
 - [Login and safe use](#login-and-safe-use)
 - [Applications and availability](#applications-and-availability)
@@ -21,6 +37,7 @@
 - [Screenshots, GIF and video](#screenshots-gif-and-video)
 - [Troubleshooting and diagnostics](#troubleshooting-and-diagnostics)
 - [Build and CI](#build-and-ci)
+- [Contributing](#contributing)
 - [Licensing, credits and guides](#licensing-credits-and-guides)
 
 ## What it is and how it looks
@@ -38,6 +55,16 @@ There are distinct systems in this repository; screenshots or tests of one do no
 | **Cloud workstation** | `Dockerfile`, `cloud/`, `scripts/`: Debian/XFCE, RDP and browser/noVNC access. A container shares the host kernel; it does not test ISO firmware boot. |
 
 The intended native layout is a top panel/application menu and bottom dock, with themed windows. The custom shell provides its own launcher, windows, settings and assistant. See the [desktop quick start](docs/QUICKSTART.md); runtime desktop integration remains to be tested in a real VM.
+
+## Why THADD OS?
+
+- 🐧 **Debian 12 live desktop** you can boot in VirtualBox in minutes (download 3 parts → join → boot).
+- 🖥️ **XFCE desktop** with a custom web shell, dock, launcher and control center.
+- 🤖 **Built-in AI assistant** (`thadd-ai`) with filesystem/shell tools and offline fallback.
+- 🔐 **Security & forensics tooling** — scanner, `rea`, DFIR helpers, hardening checks.
+- 🧪 **Experimental minimal ISO** (~78 MB) with a custom UEFI boot path.
+- ☁️ **Cloud workstation** via Docker + noVNC/RDP.
+- 📸 **31 rendered desktop snapshots** + a 49-second demo video in the repo.
 
 ## Versions, architectures and downloads
 
@@ -57,6 +84,54 @@ The reconstructed desktop filename is **`THADD-OS-2026.10.14-aurora-amd64.iso`**
 
 **There is no desktop `.iso.sha256` attachment listed in v1.6.** Download it if the maintainer adds one; do not invent a checksum or borrow one from another build. The [download guide](docs/QUICKSTART.md) includes exact Windows CMD joining, native PowerShell hashing and Linux commands, storage requirements and separate whole-image verification. Release asset bytes could not be retrieved here because the redirected download host is blocked.
 
+## Quick install (3 parts)
+
+**TL;DR:** download the three `.part-*` files + `parts.sha256` from [v1.6](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases/tag/v1.6), verify them, join them into one ISO, then attach that ISO to a VirtualBox VM. Full beginner steps: [docs/QUICKSTART.md](docs/QUICKSTART.md).
+
+### 1. Download (all from the same release)
+```text
+THADD-OS-2026.10.14-aurora-amd64.iso.part-00   (1,992,294,400 bytes)
+THADD-OS-2026.10.14-aurora-amd64.iso.part-01   (1,992,294,400 bytes)
+THADD-OS-2026.10.14-aurora-amd64.iso.part-02   (1,914,388,480 bytes)
+parts.sha256
+RELEASE-NOTES.md
+```
+Keep them in one folder. **Do not** mix releases, extract them, or rename a part to `.iso`.
+
+### 2. Verify the pieces
+```bash
+sha256sum -c parts.sha256
+```
+Stop if anything fails.
+
+### 3. Join the three parts (Linux/macOS)
+```bash
+cat THADD-OS-2026.10.14-aurora-amd64.iso.part-* > THADD-OS-2026.10.14-aurora-amd64.iso
+stat -c %s THADD-OS-2026.10.14-aurora-amd64.iso
+# Expected: 5898977280
+```
+Windows CMD:
+```bat
+copy /b "THADD-OS-2026.10.14-aurora-amd64.iso.part-00"+"THADD-OS-2026.10.14-aurora-amd64.iso.part-01"+"THADD-OS-2026.10.14-aurora-amd64.iso.part-02" "THADD-OS-2026.10.14-aurora-amd64.iso"
+```
+
+### 4. Create a VirtualBox VM and boot
+- Linux → Debian (64-bit), skip unattended install, EFI on, Secure Boot off.
+- 4 GB RAM (8 GB recommended), 2 vCPUs, 40 GB dynamic VDI.
+- Display: VMSVGA, 128 MB VRAM, 3D off.
+- Network: NAT.
+- Storage: attach **`THADD-OS-2026.10.14-aurora-amd64.iso`** (the joined file), not a part.
+- Boot the normal **Live** entry. Login (if asked): `thadd` / `thadd`, then run `passwd`.
+
+### 5. After boot
+```bash
+thadd version
+thadd doctor
+thadd-ai doctor
+```
+Live sessions are not persistent by default — save work to a separate disk/shared folder.
+
+---
 ## Hardware and VM resources
 
 Conservative **initial test configuration**, not measured hardware minima: x86_64 CPU with VT-x/AMD-V for a responsive VM, **4 GB guest RAM minimum**, **8 GB recommended** if the host has sufficient spare memory, **2 vCPUs**, and a **40 GB dynamically allocated virtual disk**. Leave memory/CPU for the host. Budget at least **12 GB free just for desktop parts + joined ISO**, plus VM disk growth and recordings; FAT32 cannot hold the reconstructed file.
@@ -166,11 +241,76 @@ Source enables Debian live-boot persistence discovery with label **`THADD-PERSIS
 
 ## Screenshots, GIF and video
 
-[![Cloud XFCE/RDP desktop capture—not an ISO boot](ci/thadd-os-screenshot.jpg)](ci/thadd-os-screenshot.jpg)
+### Demo video (rendered illustration)
 
-Above: repository cloud/RDP CI screenshot, not evidence of a desktop ISO boot. The [snapshot gallery](docs/snapshots/) and [existing 49-second MP4](docs/media/thadd-os-demo.mp4) are **programmatically rendered illustrations** (`thadd/server/video.py`), not real VM footage or acceptance results.
+The repository ships a **49-second rendered demo** (`docs/media/thadd-os-demo.mp4`). It is a programmatically generated illustration (`thadd/server/video.py`), **not** real VM footage and not acceptance evidence.
 
-**New real-footage GIF: outstanding. Five-minute real-VM MP4: outstanding.** There is no uploaded full-video URL or hosting claim yet. Use the [recording procedure](docs/VM-TESTING.md) to capture actual VM output, validate duration/encoding, generate an optimized GIF, then publish the MP4 as a GitHub Release asset and embed the GIF as a linked image. A Markdown thumbnail/link works on GitHub; arbitrary HTML `<video>` is not relied on here. Do not label generated scenes as testing footage.
+<p align="center">
+  <video src="https://raw.githubusercontent.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/main/docs/media/thadd-os-demo.mp4" controls width="100%" poster="https://raw.githubusercontent.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/main/docs/snapshots/04-desktop.png">
+    Your browser does not support inline video. <a href="docs/media/thadd-os-demo.mp4">Download the MP4</a>.
+  </video>
+</p>
+
+<p align="center">
+  <a href="docs/media/thadd-os-demo.mp4"><img src="docs/snapshots/04-desktop.png" width="640" alt="THADD OS demo thumbnail — click to open the full MP4"></a><br>
+  <em>Click the thumbnail to open the full 49-second MP4.</em>
+</p>
+
+### OS screenshots
+
+Representative screens from the rendered snapshot set (1600×900). These are illustrations of the intended desktop; they are not proof of a real ISO boot.
+
+<p align="center">
+<img src="docs/snapshots/04-desktop.png" width="49%" alt="Desktop" title="Desktop">
+<img src="docs/snapshots/05-launcher.png" width="49%" alt="Application launcher" title="Application launcher">
+<img src="docs/snapshots/09-ai-agent-chat.png" width="49%" alt="AI agent chat" title="AI agent chat">
+<img src="docs/snapshots/11-terminal-neofetch.png" width="49%" alt="Terminal (neofetch)" title="Terminal (neofetch)">
+<img src="docs/snapshots/15-security-center.png" width="49%" alt="Security center" title="Security center">
+<img src="docs/snapshots/17-forensics-lab.png" width="49%" alt="Forensics lab" title="Forensics lab">
+<img src="docs/snapshots/23-app-store.png" width="49%" alt="App store" title="App store">
+<img src="docs/snapshots/28-multi-window.png" width="49%" alt="Multi-window" title="Multi-window">
+</p>
+
+<details>
+<summary>Full snapshot gallery (31 images)</summary>
+
+| Screenshot | Caption |
+| --- | --- |
+| ![Boot splash](docs/snapshots/01-boot-splash.png) | **Boot splash** |
+| ![Boot services](docs/snapshots/02-boot-services.png) | **Boot services** |
+| ![Lock screen](docs/snapshots/03-lock-screen.png) | **Lock screen** |
+| ![Desktop](docs/snapshots/04-desktop.png) | **Desktop** |
+| ![Application launcher](docs/snapshots/05-launcher.png) | **Application launcher** |
+| ![Launcher AI search](docs/snapshots/06-launcher-ai-search.png) | **Launcher AI search** |
+| ![Control center](docs/snapshots/07-control-center.png) | **Control center** |
+| ![Notification center](docs/snapshots/08-notification-center.png) | **Notification center** |
+| ![AI agent chat](docs/snapshots/09-ai-agent-chat.png) | **AI agent chat** |
+| ![AI agent task complete](docs/snapshots/10-ai-agent-complete.png) | **AI agent task complete** |
+| ![Terminal (neofetch)](docs/snapshots/11-terminal-neofetch.png) | **Terminal (neofetch)** |
+| ![PowerShell](docs/snapshots/12-powershell.png) | **PowerShell** |
+| ![Files](docs/snapshots/13-files.png) | **Files** |
+| ![Code editor](docs/snapshots/14-code-editor.png) | **Code editor** |
+| ![Security center](docs/snapshots/15-security-center.png) | **Security center** |
+| ![Security scan (live)](docs/snapshots/16-security-scan-live.png) | **Security scan (live)** |
+| ![Forensics lab](docs/snapshots/17-forensics-lab.png) | **Forensics lab** |
+| ![DFIR cross-OS](docs/snapshots/18-dfir-cross-os.png) | **DFIR cross-OS** |
+| ![Task manager](docs/snapshots/19-task-manager.png) | **Task manager** |
+| ![System monitor](docs/snapshots/20-system-monitor.png) | **System monitor** |
+| ![Settings — appearance](docs/snapshots/21-settings-appearance.png) | **Settings — appearance** |
+| ![Settings — AI](docs/snapshots/22-settings-ai.png) | **Settings — AI** |
+| ![App store](docs/snapshots/23-app-store.png) | **App store** |
+| ![App store installing](docs/snapshots/24-app-store-installing.png) | **App store installing** |
+| ![Snapshots](docs/snapshots/25-snapshots.png) | **Snapshots** |
+| ![Screen recorder](docs/snapshots/26-screen-recorder.png) | **Screen recorder** |
+| ![Media player](docs/snapshots/27-media-player.png) | **Media player** |
+| ![Multi-window](docs/snapshots/28-multi-window.png) | **Multi-window** |
+| ![VMs (Windows/macOS)](docs/snapshots/29-vms-windows-macos.png) | **VMs (Windows/macOS)** |
+| ![Productivity suite](docs/snapshots/30-productivity-suite.png) | **Productivity suite** |
+| ![End card](docs/snapshots/31-endcard.png) | **End card** |
+
+</details>
+
+**Status:** the [snapshot gallery](docs/snapshots/) and the MP4 above are programmatically rendered illustrations. **New real-footage GIF: outstanding. Five-minute real-VM MP4: outstanding.** There is no uploaded full-video URL or hosting claim yet. Use the [recording procedure](docs/VM-TESTING.md) to capture actual VM output, validate duration/encoding, generate an optimized GIF, then publish the MP4 as a GitHub Release asset and embed the GIF as a linked image. A Markdown thumbnail/link works on GitHub. Do not label generated scenes as testing footage.
 
 ## Troubleshooting and diagnostics
 
@@ -197,6 +337,15 @@ sudo bash iso/build.sh --profile desktop
 ```
 
 The actual checksum command must run **inside `dist`** because sidecars contain basenames. Never set `THADD_SKIP_VERIFY=1` for a publishable image. CI/source tests, mocked firmware tests, squashfs inspection, browser tests and cloud RDP login are useful but **not a substitute for booting the released ISO**. [Real-VM checklist and results status](docs/VM-TESTING.md). [This review’s actual local test results](docs/reports/documentation-review-2026-10-15.md).
+
+## Contributing
+
+Contributions, bug reports and VM test results are welcome. Please:
+- Keep claims evidence-based — label anything not actually booted/tested as unverified.
+- Preserve exact ISO filename/hash/commit and sanitized logs when [reporting an issue](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/issues).
+- Do not commit build output (`build/`, `dist/`, `out/`, `iso/chroot/`).
+
+If this project helped you, please ⭐ **star the repo** — it helps others discover it.
 
 ## Licensing, credits and guides
 
