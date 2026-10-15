@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38645556778](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38645556778)
-- commit: `e0d7ea5dcb981b663734b613dbe03a25e3f38135`
+- run: [38658798810](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38658798810)
+- commit: `050302571743367c30408b935136f5c07270a53a`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -11,10 +11,10 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.TNiv3o
-  disk: /dev/root 145G 70G 75G 49% /
-  /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.14-aurora-amd64.iso
-  5625 MiB  ·  e08f3e6e2692b5bb5bd8bd95f1b4368f…
+  workspace: /tmp/thadd-verify.T8fq81
+  disk: /dev/root 145G 71G 74G 49% /
+  /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.15-aurora-amd64.iso
+  5625 MiB  ·  c3d0d9986afaec0d621309d0a6d9e032…
   ✓ PASS size is a plausible full desktop image (5625 MiB)
   ! WARN very large (5625 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
@@ -29,7 +29,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62685993 bytes)
+  ✓ PASS live/initrd.img present (62685982 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
@@ -46,7 +46,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── ship contents (deeper look inside the squashfs) ──
   ✓ PASS live/filesystem.squashfs present and extractable (5.5G)
-  ✓ PASS squashfs inventory: 589222 entries
+  ✓ PASS squashfs inventory: 589231 entries
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
@@ -57,6 +57,8 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS compositor  (usr/bin/picom)
   ✓ PASS display manager  (usr/sbin/lightdm)
   ✓ PASS THADD control centre  (usr/local/bin/thadd)
+  ✓ PASS THADD toolbox (on-demand sets)  (usr/local/bin/thadd-toolbox)
+  ✓ PASS optional set lists in the image  (usr/share/thadd/packages/optional-security.txt)
   ✓ PASS THADD AI assistant  (usr/local/bin/thadd-ai)
   ✓ PASS forensic scanner  (usr/local/bin/thadd-scan)
   ✓ PASS in-image self-test  (usr/local/bin/thadd-desktop-selftest)
@@ -72,7 +74,15 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
   ✓ PASS REA reverse-engineering  (usr/local/bin/rea)
   ✓ PASS os-release brands the system THADD OS
   ✓ PASS ID=thadd
-  ✓ PASS in-image self-test: 46 passed · 0 failed · 0 warned
+  ✓ PASS in-image self-test: 52 passed · 0 failed · 2 warned
+
+── the login banner vs the image ──
+  ✓ PASS the banner advertises rea, and it is in the image
+  ✓ PASS the banner advertises thadd, and it is in the image
+  ✓ PASS the banner advertises thadd-ai, and it is in the image
+  ✓ PASS the banner advertises thadd-scan, and it is in the image
+  ✓ PASS the banner advertises thadd-ssh, and it is in the image
+  ✓ PASS the banner advertises thadd-toolbox, and it is in the image
 
 ── documentation shipped with the image ──
   ✓ PASS documentation: SECURITY.md  (usr/share/doc/thadd/SECURITY.md)
