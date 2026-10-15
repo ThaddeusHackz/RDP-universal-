@@ -76,6 +76,9 @@ jobs:
           python3 -c "import py_compile,sys; py_compile.compile('reverse-engineering/rea', doraise=True)"
           ./reverse-engineering/rea --version
 
+      - name: The assistant's entry point actually works
+        run: python3 ai/test_ai.py
+
       - name: Forensics readers against known images
         run: python3 thadd/forensics/tests/test_triage.py
 

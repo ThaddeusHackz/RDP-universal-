@@ -345,6 +345,45 @@ else
   done <<<"$BANNER_CMDS"
 fi
 
+head1 "the image's own commands are real programs, not placeholders"
+# Existence is not evidence.  `thadd` shipped as a three-line stub that printed a
+# banner and exited 0 through six releases, and every check in this file passed:
+# the path was in the inventory and the file was executable.  So read each command
+# out of the squashfs and require two things - the banner phrase a placeholder
+# leaves behind is *absent*, and there is real evidence of what the file does.
+# That reserve phrase is "build placeholder"; do not use it in documentation, or
+# this check stops meaning anything.
+read_squashfs() { unsquashfs -cat "$SQ" "$1" 2>/dev/null || true; }
+while IFS='|' read -r path pattern desc; do
+  [[ -n "${path// }" ]] || continue
+  body="$(read_squashfs "$path")"
+  if [[ -z "$body" ]]; then
+    fail "/$path could not be read out of the image"
+  elif grep -qF -- "$pattern" <<<"$body"; then
+    pass "$desc"
+  else
+    fail "$desc — no '$pattern' in /$path"
+  fi
+done <<'CMDCONTENT'
+usr/local/bin/thadd|thadd-scan|the control centre delegates to the forensic scanner
+usr/local/bin/thadd|doctor|the control centre carries the doctor it advertises
+usr/local/bin/thadd-toolbox|optional-|the toolbox replays the shipped set lists
+usr/local/bin/thadd-ai|thadd.server.ai.cli|the assistant wrapper runs the real assistant
+opt/thadd/ai/thadd-ai.py|thadd.server.ai.cli|the assistant entry point runs the real assistant
+usr/local/bin/rea|ASAR|rea knows the container formats it unpacks
+CMDCONTENT
+
+STUBS=0
+for path in usr/local/bin/thadd usr/local/bin/thadd-ai usr/local/bin/thadd-scan \
+            usr/local/bin/thadd-toolbox usr/local/bin/rea opt/thadd/ai/thadd-ai.py; do
+  body="$(read_squashfs "$path")"
+  if grep -qi "build placeholder" <<<"$body"; then
+    fail "/$path still announces itself as a placeholder"
+    STUBS=$((STUBS + 1))
+  fi
+done
+[[ "$STUBS" -eq 0 ]] && pass "no command shipped in this image is a placeholder"
+
 head1 "documentation shipped with the image"
 # The login banner and /etc/thadd/security-posture point at these files; a pointer
 # to a missing file is worse than no pointer.

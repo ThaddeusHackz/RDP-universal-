@@ -23,7 +23,7 @@ import time
 import uuid
 from pathlib import Path
 
-from ..config import Config, data_dir, os_pretty_name
+from ..config import Config, data_dir, os_pretty_name, THADD_CODENAME, THADD_VERSION
 from ..core import BUS, RpcError, Stream
 
 # ------------------------------------------------------------------ app registry
@@ -169,7 +169,7 @@ def cmd_hello(session=None, **_):
     return {
         "os": {
             "name": os_pretty_name(),
-            "version": "1.0", "codename": "Nebula Prime",
+            "version": THADD_VERSION, "codename": THADD_CODENAME,
             "kernel": info["os"]["kernel"], "arch": info["os"]["arch"],
             "hostname": info["os"]["hostname"], "virtualization": info["os"]["virtualization"],
             "live": info["os"]["live"], "edition": info["os"]["edition"],

@@ -4,6 +4,14 @@ name: THADD OS Desktop ISO
 # Windows 11 / macOS Sequoia fusion, real browsers and tooling from apt) with
 # live-build, and attaches it to a Release.  This is the heavyweight sibling of
 # thadd-iso.yml, which builds the from-scratch THADD live ISO in pure Python.
+# A superseded push no longer has to finish: this build is an 1-2 hour, 5.6 GB
+# job, and three of them used to run side by side after three pushes, all but the
+# last describing code that no longer exists.  Runs on different refs (a tag, for
+# instance) are still independent, which is what publishing needs.
+concurrency:
+  group: iso-build-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
     inputs:

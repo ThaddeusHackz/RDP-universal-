@@ -172,6 +172,20 @@ done
 
 section "AI assistant"
 have_exec /usr/local/bin/thadd-ai          hard "thadd-ai launcher"
+have_exec /opt/thadd/ai/thadd-ai.py        hard "assistant entry point"
+# ...and it must do more than exist: this file was a placeholder in every release
+# while every existence check passed.
+if [ -x "$(p /opt/thadd/ai/thadd-ai.py)" ]; then
+    AI_VER="$(PYTHONPATH="$(p /opt/thadd/app)" python3 "$(p /opt/thadd/ai/thadd-ai.py)" --version 2>&1 | head -1 || true)"
+    # the leading anchor matters: the failure message also starts with "THADD AI",
+    # so a loose match would report a broken entry point as a working one
+    case "$AI_VER" in
+        "THADD AI "*)  ok "assistant entry point answers: $AI_VER" ;;
+        "")            soft "assistant entry point printed nothing" ;;
+        *"not installed"*) bad "assistant entry point cannot find its package: $AI_VER" ;;
+        *)             bad "assistant entry point answered '$AI_VER' instead of its version" ;;
+    esac
+fi
 have_exec /opt/thadd/security/thadd-scan   hard "thadd-scan engine"
 have_exec /usr/local/bin/thadd-scan        hard "thadd-scan launcher"
 have /opt/thadd/app/thadd/server/ai/agent.py hard "agent loop"

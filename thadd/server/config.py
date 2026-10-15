@@ -16,10 +16,62 @@ from pathlib import Path
 from typing import Any
 
 OS_RELEASE = "/etc/os-release"
+BUILD_INFO = "/etc/thadd/build-info"
+
+# Source defaults.  A *running* THADD OS is asked what it is, though: the image
+# writes its own identity to /etc/thadd/build-info (version, codename, base,
+# profile, commit), and the Debian-live desktop image identifies as
+# "2026.10 aurora" while these constants said "1.0 Nebula Prime" - so the
+# assistant, the shell's About panel and the settings API all reported a
+# *different* OS than the one they were running in.
 THADD_VERSION = "1.0"
 THADD_CODENAME = "Nebula Prime"
 THADD_BUILD = "2026.10"
 THADD_EDITION = "Universal Live (amd64)"
+
+
+def _identity_from_os() -> tuple[str | None, str | None, str | None]:
+    """(version, codename, profile) as the running system describes itself."""
+    version = codename = profile = None
+    try:
+        with open(BUILD_INFO, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                key, _, value = line.partition("=")
+                value = value.strip()
+                if not value:
+                    continue
+                if key == "THADD_OS_VERSION":
+                    version = value
+                elif key == "THADD_OS_CODENAME":
+                    codename = value
+                elif key == "THADD_OS_PROFILE":
+                    profile = value
+    except OSError:
+        pass
+    if version is None:
+        # no build-info: accept THADD OS's own os-release, never Debian's
+        try:
+            with open(OS_RELEASE, encoding="utf-8", errors="replace") as fh:
+                fields = {}
+                for line in fh:
+                    key, _, value = line.partition("=")
+                    fields[key.strip()] = value.strip().strip('"')
+            if fields.get("ID") == "thadd":
+                version = (fields.get("VERSION") or "").split(" ")[0] or None
+                if "(" in (fields.get("VERSION") or ""):
+                    codename = fields["VERSION"].split("(")[-1].rstrip(")")
+        except OSError:
+            pass
+    return version, codename, profile
+
+
+_os_version, _os_codename, _os_profile = _identity_from_os()
+if _os_version:
+    THADD_VERSION = _os_version
+if _os_codename:
+    THADD_CODENAME = _os_codename
+if _os_profile:
+    THADD_EDITION = f"Universal Live ({_os_profile})"
 
 DEFAULTS: dict[str, Any] = {
     "appearance": {

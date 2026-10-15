@@ -16,7 +16,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..config import Config, data_dir, os_pretty_name
+from ..config import Config, data_dir, os_pretty_name, THADD_CODENAME, THADD_VERSION
 from ..core import RpcError, Stream, json_dumps
 
 START_TIME = time.time()
@@ -84,8 +84,8 @@ def cmd_info(session=None, **_):
     return {
         "os": {
             "pretty": os_pretty_name(),
-            "thadd_version": osr.get("THADD_VERSION", "1.0"),
-            "codename": osr.get("THADD_CODENAME", "Nebula Prime"),
+            "thadd_version": osr.get("THADD_VERSION", THADD_VERSION),
+            "codename": osr.get("THADD_CODENAME", THADD_CODENAME),
             "build": osr.get("THADD_BUILD", "dev"),
             "edition": osr.get("THADD_EDITION", "Development"),
             "base": osr.get("PRETTY_NAME", platform.platform()),

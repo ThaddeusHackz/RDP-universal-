@@ -237,6 +237,36 @@ case "$MODE" in
         echo "     · thadd-ssh on       enable remote shell (off by default)"
         exit 0
         ;;
+      usr/local/bin/thadd)
+        if [ "${THADD_STUB_PLACEHOLDER:-0}" = "1" ]; then
+          echo "#!/usr/bin/env bash"
+          echo "# THADD OS control centre (build placeholder)"
+          echo "exit 0"
+        else
+          echo "#!/usr/bin/env bash"
+          echo "# control centre: status, doctor, security, scan, dfir, ai, toolbox"
+          echo "cmd_doctor() { :; }"
+          echo "delegate thadd-scan \"the forensic scanner is missing from this image\""
+          echo "delegate thadd-toolbox \"the toolbox is missing from this image\""
+        fi
+        exit 0
+        ;;
+      usr/local/bin/thadd-toolbox)
+        echo "#!/usr/bin/env bash"
+        echo "PKG_DIR=/usr/share/thadd/packages"
+        echo "for f in \"\$PKG_DIR\"/optional-*.txt; do list_set \"\$f\"; done"
+        exit 0
+        ;;
+      usr/local/bin/thadd-ai|opt/thadd/ai/thadd-ai.py)
+        echo "#!/bin/sh"
+        echo "exec python3 -m thadd.server.ai.cli \"\$@\""
+        exit 0
+        ;;
+      usr/local/bin/rea)
+        echo "#!/usr/bin/env python3"
+        echo "# identify, unpack (ZIP, tar, ar/deb, ASAR), strings, report"
+        exit 0
+        ;;
       usr/share/thadd/thirdparty-report.txt)
         echo "THADD OS third-party toolchain"
         echo "=============================="
@@ -556,6 +586,13 @@ def main() -> int:
               [l for l in out.splitlines() if "command not found" in l][:2])
         check("the UEFI menu is checked too", "GRUB menu carries the live parameters" in out,
               [l for l in out.splitlines() if "GRUB" in l][:2])
+        check("the image's commands are checked for content, not just existence",
+              "no command shipped in this image is a placeholder" in out,
+              [l for l in out.splitlines() if "placeholder" in l][:3])
+        check("and each one is required to name what it actually runs",
+              "the assistant entry point runs the real assistant" in out
+              and "the toolbox replays the shipped set lists" in out,
+              [l for l in out.splitlines() if "replays" in l or "entry point" in l][:3])
         check("the login banner is checked against the image, command by command",
               "the banner advertises thadd-toolbox, and it is in the image" in out,
               [l for l in out.splitlines() if "banner" in l][:4])
@@ -568,6 +605,23 @@ def main() -> int:
         check("packages Debian does not ship are surfaced, not hidden",
               "not in this release's repos" in out and "metasploit-framework" in out,
               [l for l in out.splitlines() if "repos" in l][:2])
+        print("\n[6] a placeholder in the image is caught (the defect that hid for six releases)")
+        # The whole point of the content checks: this ISO is healthy in every other
+        # way, its paths all exist, and `thadd` is the stub it used to be.  The
+        # verifier must refuse it.
+        stub_env = dict(good_env)
+        stub_env["THADD_STUB_PLACEHOLDER"] = "1"
+        proc = subprocess.run(["bash", str(ISO / "verify.sh"), str(good_iso)], cwd=str(REPO),
+                              env=stub_env, capture_output=True, text=True, timeout=900)
+        stub_out = re.sub(r"\x1b\[[0-9;]*m", "", proc.stdout + proc.stderr)
+        check("the verifier refuses an image whose command is a placeholder",
+              proc.returncode != 0, f"rc={proc.returncode}")
+        check("it names the placeholder it found",
+              "still announces itself as a placeholder" in stub_out,
+              [l for l in stub_out.splitlines() if "placeholder" in l][:3])
+        check("and the verdict is not SHIPPABLE",
+              "RESULT: SHIPPABLE" not in stub_out,
+              [l for l in stub_out.splitlines() if "RESULT" in l][:2])
     finally:
         AUTO.write_bytes(saved_auto)
         AUTO.chmod(stat.S_IMODE(saved_mode))

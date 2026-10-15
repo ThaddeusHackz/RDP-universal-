@@ -160,7 +160,7 @@ Kernel   : $(uname -r 2>/dev/null || echo linux)
 Desktop  : THADD Hybrid Shell — Windows 11 geometry × macOS Sequoia material
 Assist   : THADD AI (Groq and any OpenAI-compatible provider)
 Offensive: THADD Security Suite + Parrot/Kali Toolbox
-Reverse  : REA (rea-agents) — binaries, Electron, .NET, websites
+Reverse  : REA (`rea --help`) — binaries, Electron apps, .NET, containers
 EOF
 
 # ---- live user -----------------------------------------------------------
