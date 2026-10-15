@@ -16,6 +16,13 @@ REPO="${GITHUB_REPOSITORY:?}"
 
 [[ -f "$FILE" ]] || { echo "publish-file: $FILE does not exist"; exit 1; }
 
+# Tags identify immutable builds, not writable report branches. Their verification
+# logs remain in the workflow artifacts; never create a branch named like a tag.
+if [[ "${GITHUB_REF_TYPE:-}" == tag || "${GITHUB_REF:-}" == refs/tags/* ]]; then
+  echo "::notice::publish-file: skipping repository commit for tag $BRANCH; see workflow artifacts"
+  exit 0
+fi
+
 b64="$(base64 -w0 "$FILE")"
 api="repos/$REPO/contents/$FILE"
 
@@ -30,9 +37,9 @@ while :; do
     exit 0
   fi
   if (( attempt >= 3 )); then
-    echo "publish-file: giving up after $attempt attempts"
+    echo "::error::publish-file: failed to commit $FILE after $attempt attempts"
     echo "$out" | tail -3
-    exit 0            # never fail the job over a report
+    exit 1            # callers decide whether missing evidence blocks their job
   fi
   # the file moved under us: re-read the sha and try again
   sha="$(gh api "$api?ref=$BRANCH" --jq .sha 2>/dev/null || true)"

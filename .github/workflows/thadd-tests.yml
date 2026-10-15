@@ -98,7 +98,9 @@ jobs:
         run: sudo python3 iso/tests/test_build_sh.py
 
       - name: Release publishing safety
-        run: python3 iso/tests/test_release_publish.py
+        run: |
+          python3 iso/tests/test_release_publish.py
+          python3 scripts/ci/tests/test_publish_file.py
 
       - name: Render the desktop gallery and demo video
         env:
