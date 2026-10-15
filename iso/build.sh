@@ -411,6 +411,59 @@ VBoxManage startvm "THADD OS"
 \`\`\`
 EOF
 
+# The release body.  The publish step in .github/workflows/iso-build.yml reads
+# dist/README.txt and falls back to a single line when it is absent - which is why
+# every release so far described the desktop disc with one sentence while a 5.6 GB
+# download sat beside it in three parts.  Write the whole story here.
+cat > "$DIST_DIR/README.txt" <<EOF
+THADD OS ${VERSION} "${CODENAME}" — the desktop live system
+==========================================================================
+Debian-live, hybrid BIOS + UEFI, with the THADD Hybrid Shell (Windows 11 geometry
+x macOS Sequoia material), the browser set, the dev toolchain, the security and
+forensics tool sets, and an AI operator that can read and edit the whole machine.
+
+This disc        ${SIZE_MB} MiB · boots on VirtualBox, VMware, QEMU/KVM and bare metal
+File here        $(basename "$ISO_OUT")
+Verify           sha256sum -c $(basename "$ISO_OUT").sha256
+
+$(if (( SIZE_MB > 1900 )); then cat <<'SPLIT'
+GitHub caps one release asset at 2 GiB, so this image is uploaded in parts.  Join
+them before booting:
+
+  cat $(basename "$ISO_OUT").part-* > $(basename "$ISO_OUT")
+  sha256sum -c parts.sha256
+
+SPLIT
+fi)
+Boot it (VirtualBox, EFI)
+  VBoxManage createvm --name "THADD OS" --ostype Debian_64 --register
+  VBoxManage modifyvm  "THADD OS" --memory 4096 --cpus 2 --vram 128 \
+      --graphicscontroller vmsvga --firmware efi --accelerate3d on
+  VBoxManage storagectl  "THADD OS" --name "SATA" --add sata --controller IntelAhci --portcount 2
+  VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 0 --device 0 \
+      --type dvddrive --medium "$PWD/$(basename "$ISO_OUT")"
+  VBoxManage startvm "THADD OS"
+
+Inside
+  thadd                  the control centre (doctor, security, status, scan, dfir, ai, toolbox)
+  thadd ai               the assistant; add a Groq key for cloud reasoning, it works offline too
+  thadd rea <file>       reverse-engineer one artefact: identify, unpack, strings, report
+  rea --help             the same tool directly
+  /usr/share/doc/thadd/  QUICKSTART · SECURITY · AI · FORENSIC_SCAN · REA
+
+Live media keeps every change in RAM: install to disk from the desktop, or boot
+with the THADD-PERSISTENCE volume to keep changes across reboots.
+
+How this build was checked
+  The image is unpacked and read back — boot menus, kernel, initramfs, the shipped
+  documentation, every command the login banner advertises, the optional-package
+  installer's own report — and it tests itself from the inside while it is built
+  (/etc/thadd/selfcheck.txt, read out of the shipped squashfs).  The full report is
+  committed to docs/reports/desktop-iso-verify.md in the repository.  That is a
+  statement about the *contents* of this image: the machine that builds it cannot
+  boot a VM, so the first real boot happens on yours.
+EOF
+
 printf '\n'
 log "done — artefacts in dist/"
 ls -lh "$DIST_DIR" | sed 's/^/    /'

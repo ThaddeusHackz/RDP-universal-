@@ -452,6 +452,16 @@ def main() -> int:
         check("the stub ISO reached the expected size", produced.is_file() and produced.stat().st_size == 2 * 1024 * 1024)
         check("sha256 written", bool(list((REPO / "dist").glob("*.sha256"))))
         check("release notes written", (REPO / "dist" / "RELEASE-NOTES.md").is_file())
+        # the release *body* is dist/README.txt (see the publish step); it was never
+        # written, so every release described a 5.6 GB download in one sentence
+        body = REPO / "dist" / "README.txt"
+        check("the release body is written too", body.is_file(),
+              f"{[p.name for p in (REPO / 'dist').glob('*.txt')]}")
+        if body.is_file():
+            text = body.read_text()
+            check("it names the ISO that was actually built",
+                  produced.name in text and "sha256sum -c" in text, text[:200])
+            check("and it explains how to boot it", "VBoxManage" in text and "thadd rea" in text)
         check("the build log was kept", (REPO / "dist" / "build.log").is_file())
         check("verification can be skipped explicitly (THADD_SKIP_VERIFY=1)",
               "THADD_SKIP_VERIFY=1" in proc.stdout, proc.stdout[-300:])
