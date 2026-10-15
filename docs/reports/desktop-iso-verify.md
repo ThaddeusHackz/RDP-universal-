@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38666819457](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38666819457)
-- commit: `d383e3929c1c2477b4e92e9b38ae9914d003c2bc`
+- run: [38762181558](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38762181558)
+- commit: `69a9993a714d91857798739441586e385d60b35d`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -11,12 +11,12 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.LMS1b7
-  disk: /dev/root 145G 71G 74G 49% /
+  workspace: /tmp/thadd-verify.fRHMJE
+  disk: /dev/root 145G 70G 75G 49% /
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.15-aurora-amd64.iso
-  5625 MiB  ·  e0e29876d42656fa1b663972234f3ca4…
-  ✓ PASS size is a plausible full desktop image (5625 MiB)
-  ! WARN very large (5625 MiB) — release will be split into parts
+  5614 MiB  ·  301e2b59a6486aad5f15ba27408cb6c2…
+  ✓ PASS size is a plausible full desktop image (5614 MiB)
+  ! WARN very large (5614 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
 
 ── boot records (hybrid BIOS + UEFI) ──
@@ -29,7 +29,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62685969 bytes)
+  ✓ PASS live/initrd.img present (62685975 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
@@ -46,7 +46,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── ship contents (deeper look inside the squashfs) ──
   ✓ PASS live/filesystem.squashfs present and extractable (5.5G)
-  ✓ PASS squashfs inventory: 589236 entries
+  ✓ PASS squashfs inventory: 589229 entries
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
