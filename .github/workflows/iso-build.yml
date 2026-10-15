@@ -246,7 +246,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          case "$TAG" in v*) ;; *) TAG="v1.0" ;; esac
+          # Never map a branch build onto an existing release implicitly.
+          if [[ "${{ github.ref }}" != refs/tags/v* ]]; then
+            echo "::error::Publishing requires a version tag (refs/tags/v*); select a tag when dispatching."
+            exit 1
+          fi
           NOTES="dist/README.txt"
           [ -f "$NOTES" ] || printf 'THADD OS desktop live ISO (hybrid BIOS + UEFI).\n' > "$NOTES"
           gh release view "$TAG" >/dev/null 2>&1 || \
@@ -262,5 +266,6 @@ jobs:
           else
             gh release upload "$TAG" dist/*.iso --clobber
           fi
-          gh release upload "$TAG" dist/RELEASE-NOTES.md --clobber || true
+          # Include the joined ISO checksum as well as per-part checksums.
+          gh release upload "$TAG" dist/*.iso.sha256 dist/RELEASE-NOTES.md --clobber
           gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'

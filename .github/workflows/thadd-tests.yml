@@ -97,6 +97,9 @@ jobs:
       - name: ISO build driver (auto/config + the pre-flight guards)
         run: sudo python3 iso/tests/test_build_sh.py
 
+      - name: Release publishing safety
+        run: python3 iso/tests/test_release_publish.py
+
       - name: Render the desktop gallery and demo video
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
