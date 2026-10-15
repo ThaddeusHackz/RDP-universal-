@@ -8,6 +8,9 @@
 >
 > **Evidence status (2026-10-15):** release metadata and source interfaces reviewed; no real desktop VM boot performed in this environment. The required five-minute real-VM video and new footage-derived GIF are **outstanding**, not replaced by the existing rendered demo. [Blocker, checklist and runnable recording procedure](docs/VM-TESTING.md).
 
+<p align="center"><img src="docs/snapshots/04-desktop.png" alt="THADD OS desktop (rendered illustration)" width="85%"></p>
+<p align="center"><em>Rendered illustration of the intended THADD OS desktop — not evidence of a real ISO boot.</em></p>
+
 ## Contents
 
 - [What it is and how it looks](#what-it-is-and-how-it-looks)
