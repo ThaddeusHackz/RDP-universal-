@@ -17,7 +17,13 @@ cat <<'BANNER'
       ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═════╝      ╚═════╝ ╚══════╝
 BANNER
 printf '%s' "$C_RST"
-printf '  %sTHADD OS 2.0 "Nebula Prime" — One OS. Every Capability.%s\n\n' "$C_OK" "$C_RST"
+# Never hardcode the release name here: it said "THADD OS 2.0 Nebula Prime" while
+# the image identified itself as 2026.10 "aurora" in /etc/os-release and
+# /etc/thadd/build-info.  Ask the OS what it is.
+VERSION_LINE="$(thadd version 2>/dev/null | head -1)"
+[ -n "$VERSION_LINE" ] || VERSION_LINE="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-THADD OS}")"
+[ -n "$VERSION_LINE" ] || VERSION_LINE="THADD OS (development tree)"
+printf '  %s%s — One OS. Every Capability.%s\n\n' "$C_OK" "$VERSION_LINE" "$C_RST"
 printf '  %sbuild%s   %s\n' "$C_DIM" "$C_RST" "$(sed -n 's/^THADD_OS_//p' /etc/thadd/build-info 2>/dev/null | tr '\n' ' ' || echo '(dev tree)')"
 printf '  %skernel%s  %s   %scpu%s %s   %smem%s %s\n' "$C_DIM" "$C_RST" "$(uname -r)" \
   "$C_DIM" "$C_RST" "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')" \
@@ -28,9 +34,10 @@ printf '  %sip%s      %s   %suser%s %s\n\n' "$C_DIM" "$C_RST" \
 
 cat <<'NEXT'
   Start here
-    thadd doctor          verify the whole OS (services, GPU, network, toolbox)
-    thadd ai -i           JARVIS in the terminal — set GROQ_API_KEY first
-    thadd arsenal         the offensive security toolbox
+    thadd                 status at a glance (doctor, security, ai, scan, toolbox)
+    thadd doctor          verify the whole OS (services, desktop, network, toolbox)
+    thadd ai              JARVIS in the terminal — set GROQ_API_KEY first
+    thadd toolbox         install the offensive/RE tool sets on demand
     thadd help            every command, grouped
 
   Desktop

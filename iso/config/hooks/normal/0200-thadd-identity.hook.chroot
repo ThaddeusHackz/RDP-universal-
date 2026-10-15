@@ -82,6 +82,14 @@ cat > /etc/motd <<EOF
 
 EOF
 
+# ---- welcome screen ------------------------------------------------------
+# The banner and cloud/config/thadd both call `thadd welcome`; the script lives
+# with the image's tooling (staged at /opt/thadd/tools) and is put on PATH here.
+if [ -f /opt/thadd/tools/thadd-welcome ]; then
+    install -m 0755 /opt/thadd/tools/thadd-welcome /usr/local/bin/thadd-welcome
+    echo "✓ thadd-welcome installed"
+fi
+
 # ---- hostname contract ---------------------------------------------------
 echo "thadd-os" > /etc/hostname
 sed -i -e '/thadd-os/d' /etc/hosts 2>/dev/null || true

@@ -55,15 +55,15 @@ jobs:
 
       - name: The committed shell bundle matches its sources
         run: |
-          # desktop/js is the source; desktop/dist/thadd-shell.js is a checked-in
+          # desktop/js is the source; desktop/bundle/thadd-shell.js is a checked-in
           # artifact that the ISO ships.  Nothing else notices when the two drift,
           # and the failure mode is invisible: the image boots an *older* shell
           # than the repository contains.  Rebuild and require no diff.
           npm --prefix tools/tests install --silent --no-fund --no-audit
           bash tools/build-shell.sh
-          if ! git diff --quiet -- desktop/dist/thadd-shell.js desktop/shell.html; then
-            echo "::error::desktop/dist/thadd-shell.js is out of date — run: bash tools/build-shell.sh"
-            git diff --stat -- desktop/dist/thadd-shell.js desktop/shell.html
+          if ! git diff --quiet -- desktop/bundle/thadd-shell.js desktop/shell.html; then
+            echo "::error::desktop/bundle/thadd-shell.js is out of date — run: bash tools/build-shell.sh"
+            git diff --stat -- desktop/bundle/thadd-shell.js desktop/shell.html
             exit 1
           fi
           echo "✓ the shipped shell bundle is current"

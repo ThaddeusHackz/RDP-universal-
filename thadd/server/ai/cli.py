@@ -340,6 +340,34 @@ def cmd_chat(args, cfg: Config) -> int:
             print(f"{DIM}(no answer){RESET}")
 
 
+
+def cmd_gui(args) -> int:
+    """Open the assistant as a window, not as text.
+
+    Inside THADD OS the desktop shell owns that window, so this asks the shell's
+    launcher (installed at /usr/local/bin/thadd-jarvis-launcher) to open it.  With
+    no desktop available it says so and offers the terminal instead - silently
+    doing nothing would be worse than the honest answer.
+    """
+    import shutil
+    import subprocess
+
+    launcher = shutil.which("thadd-jarvis-launcher")
+    if launcher:
+        try:
+            subprocess.Popen([launcher])
+            print("THADD AI: opened the assistant window in the desktop shell")
+            return 0
+        except OSError as exc:
+            print(f"could not open the window: {exc}")
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        print("THADD AI: no desktop launcher installed (thadd-jarvis-launcher missing);")
+        print("          the assistant is also a window in the shell: open the 'THADD AI' app.")
+    else:
+        print("THADD AI: no graphical session (DISPLAY is unset), so there is no window to open.")
+    print("          Use the terminal instead:  thadd-ai chat")
+    return 1
+
 def cmd_models(args, cfg: Config) -> int:
     from .groq import GROQ_MODELS
 
@@ -463,7 +491,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-COMMANDS = ("chat", "ask", "models", "doctor", "selftest", "tools")
+COMMANDS = ("chat", "ask", "gui", "models", "doctor", "selftest", "tools")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -481,6 +509,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not sys.stdout.isatty():
         args.no_stream = True
+
+    if args.command == "gui":
+        return cmd_gui(args)
 
     if args.command in ("chat", "ask"):
         return cmd_chat(args, cfg)

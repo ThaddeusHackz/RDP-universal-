@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  THADD OS · thadd-toolbox — install the optional tool sets on demand
+# =============================================================================
+#  The image ships its core tooling (browsers, dev toolchain, security and
+#  forensics sets) already installed.  These extra sets are the ones a live
+#  *build* may legitimately skip: hardware firmware, desktop extras, and the
+#  heavier offensive/RE packages.  They are replayed here, at runtime, from the
+#  same lists the build used - which is why the build copies them into
+#  /usr/share/thadd/packages.
+#
+#      thadd-toolbox --list              what sets exist, and how big they are
+#      thadd-toolbox --status            what is installed vs what a set asks for
+#      thadd-toolbox offensive           install the sets for security work
+#      thadd-toolbox firmware extras     install specific sets
+#      thadd-toolbox --all               install every set
+#      thadd-toolbox --set optional-dev  same as naming the set directly
+#      thadd-toolbox --dry-run dev       show what would be installed
+#
+#  Installs go through thadd-apt-safe, so a package that does not exist in this
+#  release is logged and skipped instead of failing.  Everything is appended to
+#  /var/log/thadd/apt-safe.log and summarised in /usr/share/thadd/apt-safe-report.txt.
+#
+#  Remember: this is live media unless you installed it — packages installed now
+#  live in RAM.  (See `thadd help`.)
+# =============================================================================
+set -u
+
+PKG_DIR=/usr/share/thadd/packages
+APT_SAFE="$(command -v thadd-apt-safe || echo /usr/local/sbin/thadd-apt-safe)"
+LOG=/var/log/thadd/toolbox.log
+
+B=$'\033[1m'; D=$'\033[2m'; A=$'\033[38;5;39m'; G=$'\033[38;5;42m'; Y=$'\033[38;5;214m'; R=$'\033[38;5;203m'; N=$'\033[0m'
+[ -t 1 ] || { B=""; D=""; A=""; G=""; Y=""; R=""; N=""; }
+
+say() { printf '%s\n' "$*"; }
+ok()  { printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
+warn(){ printf '  %s!%s %s\n' "$Y" "$N" "$1"; }
+bad() { printf '  %s✗%s %s\n' "$R" "$N" "$1"; }
+
+# alias → the list files that make it up (the banner's "offensive/RE tools")
+alias_sets() {
+    case "$1" in
+        offensive|security) printf '%s\n' optional-security ;;
+        forensics|dfir|re)  printf '%s\n' optional-forensics ;;
+        dev|developer)      printf '%s\n' optional-dev ;;
+        browsers)           printf '%s\n' optional-browsers ;;
+        desktop|extras)     printf '%s\n' optional-desktop optional-extras ;;
+        firmware|hardware)  printf '%s\n' optional-firmware ;;
+        all)                ls -1 "$PKG_DIR"/optional-*.txt 2>/dev/null | sed 's#.*/##; s/\.txt$//' ;;
+        *)                  printf '%s\n' "$1" ;;
+    esac
+}
+
+list_sets() {
+    printf '\n  %sTHADD toolbox — optional sets available in this image%s\n' "$A$B" "$N"
+    printf '  %s(order: what a set asks for / how many are installed already)%s\n\n' "$D" "$N"
+    local any=0 f name want have
+    for f in "$PKG_DIR"/optional-*.txt; do
+        [ -f "$f" ] || continue
+        any=1
+        name="$(basename "$f" .txt)"
+        want="$(grep -cvE '^[[:space:]]*(#|$)' "$f" 2>/dev/null || echo 0)"
+        have=0
+        while read -r pkg; do
+            [ -n "$pkg" ] || continue
+            dpkg-query -W -f='${Status}\n' "$pkg" 2>/dev/null | grep -q 'install ok installed' && have=$((have+1))
+        done < <(sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$f" | grep -v '^$')
+        printf '  %-20s %3d package(s)   %s%d installed%s\n' "${name#optional-}" "$want" "$([ "$have" -gt 0 ] && echo "$G" || echo "$D")" "$have" "$N"
+    done
+    [ "$any" -eq 1 ] || warn "no set lists in $PKG_DIR — this image was built without them"
+    cat <<EOF
+
+  ${B}aliases${N}   offensive=security · forensics=re · desktop=desktop+extras · all
+  ${B}examples${N}  thadd-toolbox offensive
+            thadd-toolbox --dry-run firmware extras
+            thadd-toolbox --all
+EOF
+}
+
+status_sets() {
+    printf '\n  %sTHADD toolbox — what is installed%s\n\n' "$A$B" "$N"
+    local f name want have missing_list
+    for f in "$PKG_DIR"/optional-*.txt; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f" .txt)"; want=0; have=0; missing_list=""
+        while read -r pkg; do
+            [ -n "$pkg" ] || continue
+            want=$((want+1))
+            if dpkg-query -W -f='${Status}\n' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then
+                have=$((have+1))
+            else
+                missing_list="$missing_list $pkg"
+            fi
+        done < <(sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$f" | grep -v '^$')
+        if [ "$have" -eq "$want" ]; then
+            ok "$(printf '%-20s' "${name#optional-}") $have/$want installed"
+        else
+            printf '  %s!%s %-20s %s/%s installed — missing:%s\n' "$Y" "$N" "${name#optional-}" "$have" "$want" "$(printf '%.90s' "$missing_list")"
+        fi
+    done
+    [ -f /usr/share/thadd/apt-safe-report.txt ] && \
+        printf '\n  %sbuild-time installer report: /usr/share/thadd/apt-safe-report.txt%s\n' "$D" "$N"
+    return 0
+}
+
+install_sets() {
+    local dry=0 sets=()
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run|-n) dry=1 ;;
+            --set) shift || true ;;
+            *) while read -r s; do sets+=("$s"); done < <(alias_sets "$arg") ;;
+        esac
+    done
+    [ "${#sets[@]}" -gt 0 ] || { list_sets; return 2; }
+    [ -x "$APT_SAFE" ] || { bad "thadd-apt-safe is not installed — cannot install anything"; return 1; }
+
+    local files=() s f
+    for s in "${sets[@]}"; do
+        f="$PKG_DIR/${s%.txt}.txt"
+        [ -f "$f" ] && files+=("$f") || warn "no such set: $s"
+    done
+    [ "${#files[@]}" -gt 0 ] || return 1
+
+    printf '\n  %sInstalling %d set(s):%s %s\n' "$A$B" "${#files[@]}" "$N" "${files[*]##*/}"
+    if [ "$dry" -eq 1 ]; then
+        printf '  %s(dry run — nothing will be changed)%s\n\n' "$D" "$N"
+        for f in "${files[@]}"; do
+            printf '  %s%s%s\n' "$B" "$(basename "$f")" "$N"
+            sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$f" | sed 's/^/    /'
+        done
+        return 0
+    fi
+    [ "$(id -u)" -eq 0 ] || { printf '  %sRoot is needed to install packages.%s\n' "$Y" "$N"; printf '  Try: sudo thadd-toolbox %s\n' "$*"; return 1; }
+
+    mkdir -p /var/log/thadd 2>/dev/null || true
+    : >>"$LOG" 2>/dev/null || true
+    local failed=0
+    for f in "${files[@]}"; do
+        printf '\n  %s» %s%s\n' "$B" "$(basename "$f")" "$N"
+        if "$APT_SAFE" "$f"; then ok "$(basename "$f") processed"; else warn "$(basename "$f") reported problems"; failed=1; fi
+    done
+
+    printf '\n'
+    if [ "$failed" -eq 0 ]; then
+        ok "toolbox finished — see /var/log/thadd/apt-safe.log for the details"
+    else
+        warn "toolbox finished with problems — see /var/log/thadd/apt-safe.log"
+    fi
+    cat <<EOF
+
+  ${D}Live media: these packages are in RAM and vanish when you reboot.${N}
+  ${D}Installed to disk, they stay. Re-run anytime: thadd toolbox --status${N}
+EOF
+    return "$failed"
+}
+
+case "${1:-}" in
+    ""|--list|-l|list)      list_sets ;;
+    --status|status)        status_sets ;;
+    --help|-h|help)
+        sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *)                      install_sets "$@" ;;
+esac

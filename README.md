@@ -110,7 +110,7 @@ Every frame is rendered from the same code that draws the shell
 
 **Terminals** bash · zsh · fish · PowerShell (`pwsh`) · python · node · sqlite
 **Toolchain** gcc/g++, make, git, python3 + pip, node + npm, nano/vim, tar/xz/zip, openssl, curl
-**In the live system** `thadd` (toolbox), `thadd-ai` (assistant), `thadd-status`, shells on `tty1`/`tty2` and the serial line
+**In the live system** `thadd` (control centre: `thadd doctor`, `thadd security`, `thadd status`, `thadd dfir /dev/sdX`), `thadd-ai` (assistant), `thadd-toolbox` (optional tool sets on demand), `thadd-ssh`, shells on `tty1`/`tty2` and the serial line
 **Hidden gems** macOS-style ⌘K spotlight with AI search, Windows-style task manager and notification centre,
 Linux power tools, `Ctrl+Alt+F2` break-glass shell, `sysrq` recovery, live forensic triage of any disk.
 

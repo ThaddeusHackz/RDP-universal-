@@ -227,6 +227,15 @@ case "$MODE" in
         echo "  THADD desktop: OK"
         exit 0
         ;;
+      etc/motd)
+        echo "    THADD OS 1.0 \"aurora\""
+        echo "     · thadd              system control centre (status/doctor/ai)"
+        echo "     · thadd-ai chat      Groq-powered assistant for this machine"
+        echo "     · thadd-scan         forensic snapshot of this system"
+        echo "     · thadd-toolbox      install offensive/RE tools on demand"
+        echo "     · thadd-ssh on       enable remote shell (off by default)"
+        exit 0
+        ;;
       usr/share/thadd/thirdparty-report.txt)
         echo "THADD OS third-party toolchain"
         echo "=============================="
@@ -338,18 +347,42 @@ def main() -> int:
                      "opt/thadd/app/thadd/server/ai/cli.py", "opt/thadd/app/thadd/server/ai/agent.py",
                      "opt/thadd/app/thadd/forensics/triage.py",
                      "opt/thadd/desktop/thadd-desktop-selftest",
-                     "opt/thadd/desktop/dist/thadd-shell.js",
-                     "usr/share/doc/thadd/SECURITY.md"):
+                     "opt/thadd/desktop/bundle/thadd-shell.js",
+                     "usr/share/doc/thadd/SECURITY.md",
+                     "usr/local/bin/thadd", "usr/local/bin/thadd-toolbox",
+                     # the sets are staged under /opt/thadd/iso-packages/ and the
+                     # 0000 hook copies them to /usr/share/thadd/packages/ in the
+                     # chroot - assert the layer that actually carries them
+                     "opt/thadd/iso-packages/optional-security.txt"):
             check(f"overlay has /{want}", (overlay / want).exists())
         for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai",
                         "opt/thadd/app/thadd/thadd"):
             check(f"overlay is not nested at /{doubled}", not (overlay / doubled).exists())
         # the ISO's own commands have to be executable inside the image
         for tool in ("usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
+                     "usr/local/bin/thadd", "usr/local/bin/thadd-toolbox",
                      "opt/thadd/security/thadd-scan", "opt/thadd/tools/bin/thadd-apt-safe",
                      "opt/thadd/desktop/thadd-desktop-selftest"):
             path = overlay / tool
             check(f"/{tool} is executable", path.exists() and os.access(path, os.X_OK))
+
+        # The control centre is a real program, not a placeholder: run it against
+        # the staged tree and require the commands the banner promises to answer.
+        staged_thadd = overlay / "usr/local/bin/thadd"
+        for sub in ("help", "version", "status"):
+            proc_thadd = subprocess.run(["bash", str(staged_thadd), sub], capture_output=True,
+                                        text=True, timeout=120)
+            check(f"staged `thadd {sub}` runs (exit 0)", proc_thadd.returncode == 0,
+                  (proc_thadd.stdout + proc_thadd.stderr)[-200:])
+        check("staged `thadd help` lists the toolbox and dfir, not just a placeholder",
+              "thadd toolbox" in subprocess.run(["bash", str(staged_thadd), "help"],
+                                                capture_output=True, text=True).stdout
+              and "thadd dfir" in subprocess.run(["bash", str(staged_thadd), "help"],
+                                                 capture_output=True, text=True).stdout)
+        proc_tb = subprocess.run(["bash", str(overlay / "usr/local/bin/thadd-toolbox"), "--list"],
+                                 capture_output=True, text=True, timeout=120)
+        check("staged `thadd-toolbox --list` reads the shipped set lists", proc_tb.returncode == 0,
+              (proc_tb.stdout + proc_tb.stderr)[-200:])
 
         produced = REPO / "dist" / "THADD-OS-0.0-test-aurora-amd64.iso"
         check("ISO collected into dist/", produced.is_file(),
@@ -438,7 +471,12 @@ def main() -> int:
           + "-rw-r--r-- root/root 57010176 2026-10-14 12:00 squashfs-root/boot/firmware/initrd.img-6.1.0-53-amd64\n"
           + "-rw-r--r-- root/root 8466 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/SECURITY.md\n"
           + "-rw-r--r-- root/root 6706 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/QUICKSTART.md\n"
-          + "-rw-r--r-- root/root 6054 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/AI.md\n")
+          + "-rw-r--r-- root/root 6054 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/AI.md\n"
+          + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd\n"
+          + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-toolbox\n"
+          + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-ssh\n"
+          + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-passwd\n"
+          + "-rw-r--r-- root/root 1234 2026-10-14 12:00 squashfs-root/usr/share/thadd/packages/optional-security.txt\n")
 
         good_env = dict(env)
         good_env["PATH"] = f"{good_bin}:{good_env['PATH']}"
@@ -479,6 +517,9 @@ def main() -> int:
               [l for l in out.splitlines() if "command not found" in l][:2])
         check("the UEFI menu is checked too", "GRUB menu carries the live parameters" in out,
               [l for l in out.splitlines() if "GRUB" in l][:2])
+        check("the login banner is checked against the image, command by command",
+              "the banner advertises thadd-toolbox, and it is in the image" in out,
+              [l for l in out.splitlines() if "banner" in l][:4])
         check("the optional sets are reported from the installer's own report",
               "installer ran 7 optional" in out,
               [l for l in out.splitlines() if "optional set" in l][:3])

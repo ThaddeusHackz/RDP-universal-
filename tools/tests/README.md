@@ -15,4 +15,4 @@ cd tools/tests && npm install && node bundle.mjs && node smoke.mjs && node deep.
 ```
 
 `bundle.js` is generated; it is ignored by git. The canonical shipped artefact is
-`desktop/dist/thadd-shell.js`, produced by `tools/build-shell.sh`.
+`desktop/bundle/thadd-shell.js`, produced by `tools/build-shell.sh`.

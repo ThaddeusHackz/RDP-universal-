@@ -150,10 +150,10 @@ check_overlay "etc/skel/.config" "the live user's desktop profile"
 check_overlay "usr/local/bin/thadd-shell-session" "the session launcher"
 check_overlay "opt/thadd/tools/bin/thadd-apt-safe" "the tolerant package installer"
 check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
-# desktop/shell.html loads dist/thadd-shell.js by name - if that bundle is ever
+# desktop/shell.html loads bundle/thadd-shell.js by name - if that bundle is ever
 # missing (it was dropped once by a snapshot that excludes dist/), the desktop
 # would start to a blank page with no error anywhere.  Fail the build instead.
-check_overlay "opt/thadd/desktop/dist/thadd-shell.js" "the bundled desktop shell"
+check_overlay "opt/thadd/desktop/bundle/thadd-shell.js" "the bundled desktop shell"
 check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
 check_overlay "opt/thadd/security/thadd-scan" "the security suite"
 check_overlay "usr/share/doc/thadd/SECURITY.md" "the security baseline docs"

@@ -276,6 +276,8 @@ need_file usr/bin/xfwm4                  "window manager"            hard
 need_file usr/bin/picom                  "compositor"                hard
 need_file usr/sbin/lightdm               "display manager"           hard
 need_file usr/local/bin/thadd            "THADD control centre"      hard
+need_file usr/local/bin/thadd-toolbox    "THADD toolbox (on-demand sets)" hard
+need_file usr/share/thadd/packages/optional-security.txt "optional set lists in the image" hard
 need_file usr/local/bin/thadd-ai         "THADD AI assistant"        hard
 need_file usr/local/bin/thadd-scan       "forensic scanner"          hard
 need_file usr/local/bin/thadd-desktop-selftest "in-image self-test"  hard
@@ -320,6 +322,26 @@ elif grep -qi 'THADD desktop: OK' <<<"$SELFCHECK"; then
   pass "in-image self-test: $(grep -m1 -E 'passed' <<<"$SELFCHECK" | tr -s ' ' | sed 's/^ *//')"
 else
   warn "in-image self-test output present but no verdict line: $(head -1 <<<"$SELFCHECK")"
+fi
+
+head1 "the login banner vs the image"
+# The banner is written at build time and promises specific commands.  Nothing
+# checked that they exist, and one of them (`thadd-toolbox`) was advertised in
+# every release while being absent from every image - so the promise and the
+# contents are compared here, entry by entry.
+MOTD="$(unsquashfs -cat "$SQ" etc/motd 2>/dev/null || true)"
+BANNER_CMDS="$(sed -n 's/^[[:space:]]*·[[:space:]]*\([^[:space:]]*\).*/\1/p' <<<"$MOTD" | sort -u || true)"
+if [[ -z "$BANNER_CMDS" ]]; then
+  warn "no command list found in /etc/motd — the banner cannot be checked"
+else
+  while IFS= read -r cmd; do
+    [[ -n "$cmd" ]] || continue
+    if in_squashfs "usr/local/bin/$cmd" || in_squashfs "usr/bin/$cmd" || in_squashfs "usr/sbin/$cmd"; then
+      pass "the banner advertises $cmd, and it is in the image"
+    else
+      fail "the banner advertises $cmd, which is NOT in the image"
+    fi
+  done <<<"$BANNER_CMDS"
 fi
 
 head1 "documentation shipped with the image"
