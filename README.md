@@ -287,10 +287,6 @@ Representative screens from the rendered snapshot set (1600×900). These are ill
 
 </details>
 
-[![Cloud XFCE/RDP desktop capture — not an ISO boot](ci/thadd-os-screenshot.jpg)](ci/thadd-os-screenshot.jpg)
-
-Above: repository cloud/RDP CI screenshot, **not** evidence of a desktop ISO boot.
-
 **Status:** the [snapshot gallery](docs/snapshots/) and the MP4 above are programmatically rendered illustrations. **New real-footage GIF: outstanding. Five-minute real-VM MP4: outstanding.** There is no uploaded full-video URL or hosting claim yet. Use the [recording procedure](docs/VM-TESTING.md) to capture actual VM output, validate duration/encoding, generate an optimized GIF, then publish the MP4 as a GitHub Release asset and embed the GIF as a linked image. A Markdown thumbnail/link works on GitHub. Do not label generated scenes as testing footage.
 
 ## Troubleshooting and diagnostics
