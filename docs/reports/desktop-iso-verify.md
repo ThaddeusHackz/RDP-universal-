@@ -1,7 +1,7 @@
 # THADD OS desktop ISO - verification report
 
-- run: [38762181558](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38762181558)
-- commit: `69a9993a714d91857798739441586e385d60b35d`
+- run: [38780786978](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/runs/38780786978)
+- commit: `ea38c0c5a11da9d0b54f5be4f678f6b77ce80d58`
 - verify step: **success**
 - full log: artifact `THADD-OS-desktop-verify-log` (30 days) and `dist/verify.log`
 
@@ -11,10 +11,10 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ```
 
 ── artefact ──
-  workspace: /tmp/thadd-verify.fRHMJE
+  workspace: /tmp/thadd-verify.YN5O2c
   disk: /dev/root 145G 70G 75G 49% /
   /home/runner/work/THADD-OS---THE-REVERSE-ENGINEERED-OS-/THADD-OS---THE-REVERSE-ENGINEERED-OS-/dist/THADD-OS-2026.10.15-aurora-amd64.iso
-  5614 MiB  ·  301e2b59a6486aad5f15ba27408cb6c2…
+  5614 MiB  ·  746d1de38aa42c08dbb9b438b16fa9e6…
   ✓ PASS size is a plausible full desktop image (5614 MiB)
   ! WARN very large (5614 MiB) — release will be split into parts
   ✓ PASS sha256 sidecar verifies
@@ -29,7 +29,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 ── image layout ──
   554 file(s) listed on the ISO
   ✓ PASS live/vmlinuz present (8230848 bytes)
-  ✓ PASS live/initrd.img present (62685975 bytes)
+  ✓ PASS live/initrd.img present (62686012 bytes)
   ✓ PASS isolinux/isolinux.bin present (legacy BIOS boot)
   ✓ PASS isolinux/isolinux.cfg present (BIOS boot menu)
   ✓ PASS UEFI boot image present: /boot/grub/efi.img (917504 bytes)
@@ -46,7 +46,7 @@ of the shipped squashfs (identity, desktop profile, session, assistant, scanner,
 
 ── ship contents (deeper look inside the squashfs) ──
   ✓ PASS live/filesystem.squashfs present and extractable (5.5G)
-  ✓ PASS squashfs inventory: 589229 entries
+  ✓ PASS squashfs inventory: 589230 entries
   ✓ PASS THADD identity  (etc/os-release)
   ✓ PASS LSB identity  (etc/lsb-release)
   ✓ PASS build fingerprint  (etc/thadd/build-info)
