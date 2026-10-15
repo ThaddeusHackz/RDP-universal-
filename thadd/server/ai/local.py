@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 HELP = """THADD Local (offline assistant)
@@ -28,13 +27,33 @@ full agent: multi-step reasoning, code writing, autonomous PC automation and mor
 
 
 def local_reply(prompt: str, session) -> tuple[str, list[dict]]:
+    """Use the same approval/audit/tool boundary as the cloud agent."""
+    try:
+        return _local_reply(prompt, session)
+    except LocalToolError as exc:
+        return f"Action not completed: {exc}", []
+
+
+class LocalToolError(RuntimeError):
+    pass
+
+
+def _local_reply(prompt: str, session) -> tuple[str, list[dict]]:
     """Return ``(markdown_text, executed_actions)``."""
     text = (prompt or "").strip()
     low = text.lower()
     actions: list[dict] = []
 
-    def run(tool: str, fn, **args):
-        result = fn(**args)
+    from .agent import AgentRun
+
+    executor = AgentRun(session, [])
+
+    def run(tool: str, fn=None, **args):
+        # fn is retained for the read helpers below, but execution must go
+        # through the shared gate, never directly to an API or subprocess.
+        result = executor._execute_tool(tool, args)
+        if result.get("error") or result.get("denied") or result.get("blocked"):
+            raise LocalToolError(result.get("error") or result.get("reason") or result.get("note") or "denied")
         actions.append({"tool": tool, "args": args, "result": result})
         return result
 
@@ -123,8 +142,8 @@ def local_reply(prompt: str, session) -> tuple[str, list[dict]]:
     m = re.search(r"open\s+(\w+)", low)
     if m:
         app = m.group(1)
-        return f"Opening **{app}** — if it does not appear, this environment has no graphical session (works in the live ISO).", \
-               actions + [{"tool": "open_app", "args": {"app": app}, "result": {"requested": app}}]
+        run("open_app", app=app)
+        return f"Requested **{app}**; a running graphical shell is required.", actions
 
     if "snapshot" in low and ("create" in low or "make" in low or "take" in low):
         from ..api import snapshots as snapapi
@@ -134,9 +153,8 @@ def local_reply(prompt: str, session) -> tuple[str, list[dict]]:
 
     if low.startswith("run ") or low.startswith("exec ") or low.startswith("$ "):
         cmd = text.split(" ", 1)[1] if " " in text else ""
-        out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
-        actions.append({"tool": "shell_run", "args": {"command": cmd}, "result": {"code": out.returncode}})
-        return f"`$ {cmd}`\n\n```\n{(out.stdout or out.stderr)[:4000]}\n```", actions
+        out = run("shell_run", command=cmd, timeout=120)
+        return f"`$ {cmd}`\n\n```\n{(out.get('stdout') or out.get('stderr') or '')[:4000]}\n```", actions
 
     # ------------------------------------------------------------------ fallback
     return (

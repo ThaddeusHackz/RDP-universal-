@@ -15,10 +15,14 @@
 set -u
 THADD_LIB="${THADD_LIB:-/opt/thadd/app}"
 case ":${PYTHONPATH:-}:" in *":$THADD_LIB:"*) ;; *) PYTHONPATH="$THADD_LIB${PYTHONPATH:+:$PYTHONPATH}" ;; esac
-# running from a checkout (not the image)? then the repo root is three levels up
+# running from a checkout (not the image)? then the repo root is four levels up
 if [ ! -d "$THADD_LIB/thadd" ]; then
-  repo="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd || true)"
+  repo="$(cd "$(dirname "$0")/../../../.." 2>/dev/null && pwd || true)"
   [ -n "$repo" ] && [ -d "$repo/thadd" ] && THADD_LIB="$repo" && PYTHONPATH="$THADD_LIB"
 fi
 export PYTHONPATH
-exec python3 /opt/thadd/security/thadd-scan "$@"
+scanner=/opt/thadd/security/thadd-scan
+if [ ! -f "$scanner" ] && [ -n "${repo:-}" ]; then
+  scanner="$repo/security/thadd-scan"
+fi
+exec python3 "$scanner" "$@"

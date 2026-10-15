@@ -1,134 +1,138 @@
-# THADD OS — quick start
+# Desktop ISO: beginner download and VirtualBox guide
 
-`docs/QUICKSTART.md` · ships inside the image as `/usr/share/doc/thadd/QUICKSTART.md`.
+[README](../README.md) · Release inventory checked **2026-10-15**, tag **v1.6**.
 
-## 1. Get the ISO
+## 1. Download the desktop image
 
-Every [release](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases)
-carries two images:
+Open [v1.6 Assets](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases/tag/v1.6) and download **every numbered part**:
 
-| Image | What it is |
-| --- | --- |
-| `THADD-OS-<version>-aurora-amd64.iso` (~5.6 GB, **three parts**) | The full desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion, every browser, the dev/security/forensics toolchain, the AI assistant and the forensic scanner |
-| `THADD-OS-1.0-x86_64.iso` (78 MB) | The minimal from-scratch live system (own boot chain, own userland, the THADD service and shell) |
+1. `THADD-OS-2026.10.14-aurora-amd64.iso.part-00`
+2. `THADD-OS-2026.10.14-aurora-amd64.iso.part-01`
+3. `THADD-OS-2026.10.14-aurora-amd64.iso.part-02`
+4. `parts.sha256`
+5. `RELEASE-NOTES.md`; download the desktop whole-image `.iso.sha256` **if available**.
 
-The desktop image is bigger than GitHub's 2 GiB per-asset limit, so it is split. Rejoin it:
+These parts are pieces of **one large Debian-live desktop ISO**, not three bootable images. Keep them in a new folder containing only this image's files. **Never mix release tags, dates or versions. Do not extract the pieces with archive software. Do not rename any piece to `.iso`.** Join them in numerical order before attaching to a VM.
+
+Allow at least **12 GB free** for both the pieces (5,898,977,280 bytes total) and reconstructed ISO (the same size), with extra room for a VM and recording. Use NTFS/exFAT/ext4 or another filesystem supporting files over 4 GB, not FAT32. Browser downloads must be complete: no `.crdownload`, `.partial`, or automatically renamed `(1)` copies.
+
+The separate **`THADD-OS-1.0-x86_64.iso`** (77,848,576 bytes, approximately 78 MB) is an experimental minimal Linux image with a different boot path. It is already a single ISO; **do not join it to desktop parts**. Its `.iso.sha256`/`manifest.json` do not verify the desktop.
+
+## 2. Verify pieces, join, then verify the whole ISO
+
+### Linux (Bash)
+
+In a terminal, change to the folder containing these exact downloads:
 
 ```bash
-cat THADD-OS-*-aurora-amd64.iso.part-* > thadd-os.iso
 sha256sum -c parts.sha256
+# Stop if any part is missing or any checksum fails.
+cat THADD-OS-2026.10.14-aurora-amd64.iso.part-* > THADD-OS-2026.10.14-aurora-amd64.iso
+stat -c %s THADD-OS-2026.10.14-aurora-amd64.iso
+# Expected size: 5898977280
 ```
 
-Every release page also links `docs/reports/desktop-iso-verify.md` — the report from
-`iso/verify.sh`, which reads the finished ISO back and asserts its boot records, its
-layout and the contents of the shipped squashfs. If that report does not end in
-`RESULT: SHIPPABLE`, do not boot it.
+Zero-padded `00`, `01`, `02` sort in numerical order. Ensure the wildcard matches exactly those three pieces, not stale downloads. A failed checksum means re-download the failing piece from **the same release**; do not boot the result.
 
-## 2. Boot it in VirtualBox
+### Windows: verify pieces with native PowerShell
+
+Open PowerShell in the download folder. This parses standard `sha256sum` output and checks each listed filename with Windows `Get-FileHash`; it is **not** a Linux command:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$expectedNames = @(
+ 'THADD-OS-2026.10.14-aurora-amd64.iso.part-00',
+ 'THADD-OS-2026.10.14-aurora-amd64.iso.part-01',
+ 'THADD-OS-2026.10.14-aurora-amd64.iso.part-02'
+)
+$seen = @()
+Get-Content -LiteralPath '.\parts.sha256' | ForEach-Object {
+ if ($_ -notmatch '^([0-9a-fA-F]{64}) [ *](.+)$') { throw "Invalid checksum line: $_" }
+ $expected = $Matches[1]; $name = $Matches[2]
+ if ($name -notin $expectedNames) { throw "Unexpected filename: $name" }
+ if ($name -in $seen) { throw "Duplicate filename: $name" }
+ $seen += $name
+ $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $name).Hash
+ if ($actual -ne $expected) { throw "Checksum FAILED: $name" }
+ Write-Host "OK: $name"
+}
+if ($seen.Count -ne 3) { throw 'Expected all three parts in parts.sha256' }
+```
+
+### Windows Command Prompt: join the three parts
+
+Open **Command Prompt** (`cmd.exe`), not PowerShell, and `cd /d` to the folder. `copy` is different in PowerShell; the following command belongs in CMD:
+
+```bat
+copy /b "THADD-OS-2026.10.14-aurora-amd64.iso.part-00"+"THADD-OS-2026.10.14-aurora-amd64.iso.part-01"+"THADD-OS-2026.10.14-aurora-amd64.iso.part-02" "THADD-OS-2026.10.14-aurora-amd64.iso"
+```
+
+CMD reports one file copied. Check its size in Explorer → Properties: **5,898,977,280 bytes** (not “size on disk”). This command uses binary concatenation, not extraction. Do not attach a part to VirtualBox.
+
+### Whole-image checksum: a separate step
+
+Part checksums verify the downloads; a whole-image checksum also checks the reconstructed result. **As reviewed, v1.6 does not list `THADD-OS-2026.10.14-aurora-amd64.iso.sha256`.** Do not substitute the minimal image's checksum or a 2026.10.15 build report. Without a trusted whole-image checksum, report this verification step as **unavailable**. You can compute your own hash for test provenance, but that alone is not publisher verification.
+
+If the maintainer supplies the matching desktop sidecar, keep the reconstructed ISO's name exactly as above (the name inside the sidecar). On Linux, in that folder:
 
 ```bash
-VBoxManage createvm --name "THADD OS" --ostype Debian_64 --register
-VBoxManage modifyvm  "THADD OS" --memory 4096 --cpus 2 --vram 128 \
-                     --graphicscontroller vmsvga --firmware efi
-VBoxManage createhd    --filename "$HOME/THADD-OS/disk.vdi" --size 40960
-VBoxManage storagectl  "THADD OS" --name "SATA" --add sata --controller IntelAhci --portcount 2
-VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 0 --device 0 --type hdd \
-                       --medium "$HOME/THADD-OS/disk.vdi"
-VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 1 --device 0 --type dvddrive \
-                       --medium "$PWD/thadd-os.iso"
-VBoxManage startvm "THADD OS"
+sha256sum -c THADD-OS-2026.10.14-aurora-amd64.iso.sha256
 ```
 
-Or in the GUI: **New VM** → Type *Linux*, Version *Debian (64-bit)* → **4 GB RAM, 2 CPUs,
-128 MB VRAM** → attach the ISO as a DVD → start.
+On Windows PowerShell, print the downloaded sidecar and compute the ISO hash:
 
-* The image is a **hybrid ISO**: it boots with EFI *and* with legacy BIOS, so the
-  firmware setting does not have to match anything.
-* Guest additions are already installed in the image (`virtualbox-guest-utils`,
-  `virtualbox-guest-x11`), so the mouse integrates, the display resizes and shared
-  folders work without running anything.
-* 4 GB RAM is comfortable; 2 GB works. The desktop itself is on the disc, so the VM
-  needs no disk — attach one only if you want to install.
+```powershell
+Get-Content -LiteralPath '.\THADD-OS-2026.10.14-aurora-amd64.iso.sha256'
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\THADD-OS-2026.10.14-aurora-amd64.iso'
+```
 
-## 3. Log in
+Compare **all 64 hexadecimal characters**, ignoring letter case; the file name in the sidecar must identify this ISO. Alternatively native CMD supports:
 
-The session starts by itself (autologin, `/etc/lightdm/`), and the password for the
-live user `thadd` is `thadd`. Change it before you connect to a network you do not
-control (`thadd-passwd`) — there is a full description in `docs/SECURITY.md`.
+```bat
+certutil -hashfile "THADD-OS-2026.10.14-aurora-amd64.iso" SHA256
+```
 
-The desktop is XFCE wearing a Windows 11 × macOS Sequoia skin: a top bar and an
-application menu on one side, a Plank dock on the other, rounded translucent windows
-by way of `picom`. Nothing is a screenshot — it is a real window manager with a real
-theme, so every application behaves natively.
+This prints a hash; it does **not** automatically compare it. A different filename such as `thadd-os.iso` requires explicitly comparing that file's hash to the trusted sidecar, or renaming the reconstructed image back to the sidecar's expected name—not renaming a part.
 
-### Keyboard
+**Testing disclosure:** Linux binary joining/checksum semantics are exercised by `scripts/tests/test_documented_interfaces.py` with synthetic pieces. CMD/PowerShell examples have been reviewed for their native interfaces, but **not executed on Windows in this Linux environment**, and actual release bytes were inaccessible. Windows/released-image testing is outstanding; do not call these end-to-end release-tested examples yet.
 
-| Shortcut | Action |
-| --- | --- |
-| `Ctrl+Alt+T` | Terminal (maximised) |
-| `Ctrl+Alt+F` | Files (Thunar) |
-| `Ctrl+Alt+B` | Firefox ESR |
-| `Ctrl+Alt+M` | Task manager |
-| `Ctrl+Alt+S` | THADD doctor — environment and health report |
-| `Ctrl+Alt+J` | THADD AI ("Jarvis") |
-| `Ctrl+Alt+X` | Switch desktop mode (native XFCE ↔ THADD shell) |
-| `Print` | Screenshot to `~/Pictures` |
+## 3. Create a VirtualBox VM
 
-### Hidden features (the ones that are usually a registry hack somewhere else)
+Use a host with x86_64 virtualization support and enough spare resources. VirtualBox on ARM hosts does not make this amd64 image native ARM software.
 
-* **Both worlds at once**: `Ctrl+Alt+X` switches between the native XFCE desktop and
-  the THADD shell, without logging out — `thadd-desktop-mode xfce|shell`.
-* **The AI is not a browser tab**: `thadd-ai` in any terminal, or the dock's assistant,
-  drive the same agent with real tools over the local bridge (`127.0.0.1:8787`).
-* **Hidden files, power menu, workspace overview**: standard XFCE behaviour with the
-  THADD shortcut map on top, so nothing that works on Debian stops working here.
+1. Select **New**, name it THADD OS, choose **Linux → Debian (64-bit)**. **Skip unattended installation** (this is a live image, not an automated installer).
+2. Allocate **4096 MB RAM minimum**, preferably **8192 MB** if the host can spare it; **2 CPUs**. Do not exhaust the host's resources.
+3. Create a **40 GB dynamically allocated VDI**. This is an isolated guest disk that grows as used. It does not install THADD or make the session persistent by itself.
+4. Settings → System → Motherboard: **Enable EFI**. Secure Boot is not supported by this build configuration; leave it disabled.
+5. Settings → Display: **VMSVGA**, **128 MB video memory**, **3D acceleration disabled** initially. After a successful baseline test, 3D may improve compositing if compatible host drivers and guest additions are present; turn it back off if glitches occur. No perfect VirtualBox compatibility is claimed.
+6. Settings → Network: Adapter 1 enabled, **NAT**, cable connected. Do not configure bridged access or port forwarding just for this test.
+7. Settings → Storage: optical drive → choose **`THADD-OS-2026.10.14-aurora-amd64.iso`**, the reconstructed file, **not `.part-00`**.
+8. Start; select the normal **Live** entry (typically **Live system (amd64)**, source/generated menu identifier **`live-amd64`**, kernel parameters include **`boot=live`**). There is no confirmed graphical installer entry. The committed report confirms that identifier on a later build; exact v1.6 display text awaits a real boot.
+9. Wait for LightDM autologin. If a login is requested, source-configured desktop credentials are **`thadd` / `thadd`**. Change the password privately with `passwd`.
 
-## 4. What is installed
+**Do not repartition your host disk merely to try this VM.** Do not grant the guest raw host disks. Start with shared clipboard/drag-and-drop/shared folders disabled if handling untrusted files.
+
+## 4. Check the running system
 
 ```bash
-thadd doctor            # environment, tool groups, what is missing
-thadd-ai doctor         # the assistant's view: models, key, autonomy, tools
-thadd-scan --summary    # forensic snapshot of this machine
-rea --help              # reverse-engineer one file: identify, unpack, strings, report
-thadd --help            # the control centre
+thadd version
+cat /etc/thadd/build-info
+thadd doctor
+thadd-desktop-selftest
+thadd-ai doctor
+thadd-ai selftest
+thadd-scan --quick --summary
+thadd-toolbox --status
 ```
 
-* **Browsers**: Firefox ESR, Chromium, Google Chrome, Microsoft Edge, Brave, Epiphany,
-  qutebrowser, Falkon, Tor Browser launcher, and `w3m`/`lynx`/`links2` on a bare TTY.
-* **Development**: gcc/g++/make, git, Python 3 with pip/venv, Node.js with npm/npx,
-  VS Code, PowerShell 7, gdb, strace, and the usual Debian build tooling.
-* **Security and forensics (Parrot/HTB class)**: Metasploit, nmap, sqlmap, hydra,
-  aircrack-ng, hashcat, John the Ripper, bettercap, mitmproxy, impacket,
-  Wireshark/tshark, tcpdump, nikto, whatweb, dirb, wfuzz, gobuster, binwalk, sleuthkit,
-  radare2/rizin where the release packages them.
-* **Everything else**: LibreOffice, Thunderbird, GIMP, VLC, Calibre, Remmina, qBittorrent,
-  printing and scanning, Bluetooth and camera support, guest additions for VirtualBox,
-  VMware and QEMU.
+`thadd doctor` is advisory (it can exit zero with problems). Read the output. The package installer report is `/usr/share/thadd/apt-safe-report.txt`. [README software status](../README.md#applications-and-availability) explains why an optional package isn't necessarily installed.
 
-Tools that Debian 12 does not carry (Metasploit and PowerShell come from Rapid7's and
-Microsoft's own repositories; Chrome, Edge, Brave and VS Code from their vendors') are
-installed by a tolerant hook, and the verification report names anything that did not
-land instead of leaving you to discover it.
+## 5. Live data and installation
 
-## 5. Leaving no trace / keeping your work
+A live session normally loses its overlay at reboot. Save work intentionally to a disposable guest disk/shared folder/USB volume; do not assume a VM disk captures the live root.
 
-The live system runs from the disc: your files live in RAM and are gone at shutdown.
-To keep them, either
+Source passes `persistence persistence-label=THADD-PERSISTENCE` to Debian live-boot. A separately prepared persistence filesystem with the matching label and a `persistence.conf` (commonly `/ union`) is required. This is **source-configured capability, not runtime-verified persistence**. Consult [Debian live persistence documentation](https://live-team.pages.debian.net/live-manual/html/live-manual/customizing-run-time-behaviours.en.html#persistence), use only disposable guest media and test a marker across reboot before trusting it. No destructive partitioning recipe is provided here.
 
-* attach the VM's disk and install THADD OS with the desktop's installer
-  (`Installer` in the app menu, or `sudo debian-installer-launcher`), or
-* mount a shared folder (`VBoxManage sharedfolder add …`) or USB stick and work there.
+**Installation is unconfirmed:** the build sets `--debian-installer none`. No `debian-installer-launcher` workflow or working THADD graphical installer has been established. Older documentation promising one was inaccurate. Neither creating a VDI nor selecting Live installs the system. Keep evaluation in the VM; do not improvise a host-disk installation.
 
-Persistence on the live media itself (a `persistence` partition) is a supported
-Debian-live feature; the boot menu's second entry (`Persistence`) uses it if you create
-one.
-
-## 6. If something looks wrong
-
-| Symptom | Where to look |
-| --- | --- |
-| Black screen after the boot menu | Boot the **`safe mode`** entry (nomodeset) — `VirtualBox → Settings → Display → VMSVGA` is what the image is built for |
-| No network | `nmcli device status`, then `thadd doctor` |
-| A tool is missing | `thadd-scan --summary` (its "toolkit" section lists what is really installed) and `/usr/share/thadd/apt-safe-report.txt` |
-| The boot failed entirely | `docs/reports/desktop-iso-verify.md` for that release tells you whether the disc was sound before it reached you |
-| Anything else | `thadd doctor`, `/var/log/thadd/`, and the release's verification report |
+See [troubleshooting](../README.md#troubleshooting-and-diagnostics) and [VM acceptance/recording](VM-TESTING.md).

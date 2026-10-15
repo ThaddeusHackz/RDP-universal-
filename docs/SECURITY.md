@@ -1,3 +1,5 @@
+> **Evidence boundary (2026-10-15):** this guide describes intended build configuration, not a runtime-verified baseline for every release. Security packages are optional/tolerant installs: check `thadd-toolbox --status`, `systemctl`, `sudo ufw status verbose` and `sudo aa-status` in the exact guest. No real ISO VM test was run here. The desktop source configures public `thadd` / `thadd` and LightDM autologin; change it privately using `passwd`. Changes/logs are lost without tested persistent storage. No confirmed installer is supplied (`--debian-installer none`). See [quick start](QUICKSTART.md) and [AI safety caveats](AI.md), especially the older offline approval bypass.
+
 # THADD OS — security baseline
 
 This is the full description of what `0400-thadd-security` applies to every THADD OS
@@ -136,7 +138,7 @@ Control it with `thadd-ssh`:
 ```bash
 thadd-ssh status     # default action
 thadd-ssh key        # paste a public key into ~/.ssh/authorized_keys
-thadd-password?      # no: change the password first with thadd-passwd
+passwd              # change the public password first, privately
 sudo thadd-ssh on    # starts sshd (asks for confirmation first)
 sudo thadd-ssh off   # stops and disables it
 ```
