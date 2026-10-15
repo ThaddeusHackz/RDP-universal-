@@ -82,6 +82,17 @@ cat > /etc/motd <<EOF
 
 EOF
 
+# ---- the reverse-engineering tool ----------------------------------------
+# The banner promises `rea --help` and nothing has ever shipped a `rea`: the REA
+# helper lives with the image's tooling (staged at /opt/thadd/reverse-engineering)
+# and is put on PATH here, so the promise is true on a machine with no network.
+if [ -f /opt/thadd/reverse-engineering/rea ]; then
+    install -m 0755 /opt/thadd/reverse-engineering/rea /usr/local/bin/rea
+    echo "✓ rea installed ($(/usr/local/bin/rea --version 2>/dev/null || echo 'version unknown'))"
+else
+    echo "! /opt/thadd/reverse-engineering/rea is missing — the banner promises 'rea --help'"
+fi
+
 # ---- welcome screen ------------------------------------------------------
 # The banner and cloud/config/thadd both call `thadd welcome`; the script lives
 # with the image's tooling (staged at /opt/thadd/tools) and is put on PATH here.

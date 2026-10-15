@@ -47,6 +47,18 @@ Any browser works for the key; the assistant itself never needs one — it is th
 * **safety net** — `create_snapshot`, `list_snapshots`, `restore_snapshot`
 * **research** — `web_fetch`, `list_tools`
 
+## Reading a single artefact
+
+Alongside the disk-wide forensic engine, the image ships `rea`
+(`reverse-engineering/`): identify a binary, container or Electron app, extract
+it, list the interesting strings, and write a markdown report. It is the tool to
+reach for before asking the assistant about an unknown file —
+
+```bash
+rea --report ~/Downloads/installer.exe     # then: "read that report and tell me what you see"
+thadd rea ~/Downloads/installer.exe        # same thing through the control centre
+```
+
 ## The safety model, in plain words
 
 1. **An autonomy dial.** `readonly` (it may look, never touch), `confirm` (the default —

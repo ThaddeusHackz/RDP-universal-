@@ -155,7 +155,7 @@ fi
 section "the commands the banner promises"
 # Every command the login banner lists must exist and start without error; a
 # banner that advertises something absent is worse than a shorter banner.
-for cmd in thadd thadd-ai thadd-scan thadd-toolbox thadd-ssh thadd-passwd; do
+for cmd in thadd thadd-ai thadd-scan thadd-toolbox thadd-ssh thadd-passwd rea; do
     path="$(p "/usr/local/bin/$cmd")"
     if [ -x "$path" ]; then
         if "$path" version >/dev/null 2>&1 || "$path" help >/dev/null 2>&1; then

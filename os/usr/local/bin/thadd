@@ -14,6 +14,7 @@
 #      thadd scan [--summary]    forensic snapshot  → thadd-scan
 #      thadd dfir <disk|image>   forensic triage of a device → thadd-scan --device
 #      thadd ai [args…]          the assistant      → thadd-ai
+#      thadd rea <file|dir>      reverse-engineer an artefact → rea
 #      thadd toolbox [set|--all] install optional tool sets → thadd-toolbox
 #      thadd update              refresh package lists and list upgradable
 #      thadd welcome             the first-boot screen → thadd-welcome
@@ -80,7 +81,7 @@ cmd_status() {
     kv "cpu"    "$(nproc) core(s)"
 
     head1 "the OS itself"
-    for cmd in thadd-ai thadd-scan thadd-toolbox thadd-desktop-selftest thadd-ssh thadd-passwd; do
+    for cmd in thadd-ai thadd-scan thadd-toolbox thadd-desktop-selftest thadd-ssh thadd-passwd rea; do
         if have "$cmd"; then ok "$cmd"; else warn "$cmd is not installed"; fi
     done
     if [ -x /usr/local/bin/thadd-desktop-selftest ]; then
@@ -209,6 +210,8 @@ cmd_dfir()   {
 }
 cmd_ai()     { delegate thadd-ai     "the assistant is missing from this image" "$@"; }
 cmd_toolbox(){ delegate thadd-toolbox "the toolbox installer is missing from this image" "$@"; }
+cmd_rea()    { delegate rea "the reverse-engineering tool is missing from this image" "$@"; }
+
 cmd_welcome(){
     if have thadd-welcome; then exec thadd-welcome "$@"; fi
     cmd_status
@@ -247,7 +250,7 @@ cmd_version() {
     if [ -f "$BUILD_INFO" ]; then sed 's/^/  /' "$BUILD_INFO"; else printf '  (no build fingerprint on this system)\n'; fi
     printf '  shell bundle: %s\n' "$( [ -f /opt/thadd/desktop/bundle/thadd-shell.js ] && echo "present ($(du -h /opt/thadd/desktop/bundle/thadd-shell.js | cut -f1))" || echo absent )"
     printf '  tools: '
-    for c in thadd-ai thadd-scan thadd-toolbox thadd-ssh thadd-passwd; do have "$c" && printf '%s ' "$c"; done
+    for c in thadd-ai thadd-scan thadd-toolbox thadd-ssh thadd-passwd rea; do have "$c" && printf '%s ' "$c"; done
     printf '\n'
     return 0
 }
@@ -263,6 +266,7 @@ cmd_help() {
   ${B}thadd scan${N} [--summary]    forensic snapshot of this running system
   ${B}thadd dfir${N} <disk|image>   forensic triage of a device or disk image
   ${B}thadd ai${N} [args…]          the AI assistant (thadd-ai chat|ask|doctor)
+  ${B}thadd rea${N} <file|dir>    reverse-engineer an artefact → rea
   ${B}thadd toolbox${N} [set|--all] install optional tool sets on demand
   ${B}thadd update${N}              refresh package lists, list upgradable
   ${B}thadd welcome${N}             the first-boot screen
@@ -270,7 +274,7 @@ cmd_help() {
   ${B}thadd help${N}                this text
 EOF
     line
-    printf '  %sDocs: /usr/share/doc/thadd/ (QUICKSTART · SECURITY · AI)%s\n\n' "$D" "$N"
+    printf '  %sDocs: /usr/share/doc/thadd/ (QUICKSTART · SECURITY · AI · FORENSIC_SCAN · REA)%s\n\n' "$D" "$N"
     return 0
 }
 
@@ -282,6 +286,7 @@ case "${1:-}" in
     scan|forensics)       shift; cmd_scan "$@" ;;
     dfir|triage)          shift; cmd_dfir "$@" ;;
     ai|assistant|jarvis)  shift; cmd_ai "$@" ;;
+    rea|reverse|re)       shift; cmd_rea "$@" ;;
     toolbox|tools)        shift; cmd_toolbox "$@" ;;
     update|upgrade)       cmd_update ;;
     welcome)              shift; cmd_welcome "$@" ;;

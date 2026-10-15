@@ -290,7 +290,8 @@ need_file opt/thadd/security/thadd-scan "THADD Scan engine"         hard
 need_file opt/thadd/tools/bin/thadd-apt-safe "tolerant package installer" soft
 need_file usr/share/applications/firefox-esr.desktop "Firefox browser"  soft
 need_file usr/bin/chromium               "Chromium binary"           soft
-need_file usr/local/bin/rea              "REA reverse-engineering"   soft
+need_file usr/local/bin/rea              "REA reverse-engineering"   hard
+need_file opt/thadd/reverse-engineering/rea "REA implementation (as staged)" hard
 
 # Identity must literally say THADD OS.  /etc/os-release is a symlink to
 # ../usr/lib/os-release in this image, and `unsquashfs -cat` does not promise to
@@ -347,7 +348,9 @@ fi
 head1 "documentation shipped with the image"
 # The login banner and /etc/thadd/security-posture point at these files; a pointer
 # to a missing file is worse than no pointer.
-for doc in SECURITY.md QUICKSTART.md AI.md; do
+# FORENSIC_SCAN.md and REA.md are staged from the repository root and
+# reverse-engineering/ because the other guides send the reader to them.
+for doc in SECURITY.md QUICKSTART.md AI.md FORENSIC_SCAN.md REA.md; do
   need_file "usr/share/doc/thadd/$doc" "documentation: $doc" soft
 done
 

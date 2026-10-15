@@ -109,8 +109,12 @@ stage() { # stage <src-relative-to-repo> <dest-in-image>
 if [[ -d "$REPO_ROOT/docs" ]]; then
   mkdir -p "$OVERLAY/usr/share/doc/thadd"
   cp -f "$REPO_ROOT"/docs/*.md "$OVERLAY/usr/share/doc/thadd/" 2>/dev/null || true
+  # QUICKSTART/SECURITY/AI live in docs/, but they send the reader on to the
+  # forensic method and to the reverse-engineering tool, so both come along.
+  cp -f "$REPO_ROOT/FORENSIC_SCAN.md" "$OVERLAY/usr/share/doc/thadd/" 2>/dev/null || true
+  cp -f "$REPO_ROOT/reverse-engineering/README.md" "$OVERLAY/usr/share/doc/thadd/REA.md" 2>/dev/null || true
   if [[ -f "$OVERLAY/usr/share/doc/thadd/SECURITY.md" ]]; then
-    ok "documentation -> /usr/share/doc/thadd ($(ls -1 "$OVERLAY/usr/share/doc/thadd" | wc -l) files)"
+    ok "documentation -> /usr/share/doc/thadd ($(ls -1 "$OVERLAY/usr/share/doc/thadd" | wc -l) files: $(ls -1 "$OVERLAY/usr/share/doc/thadd" | tr '\n' ' '))"
   else
     warn "no docs/*.md to stage — the image's documentation pointers will dangle"
   fi

@@ -71,6 +71,10 @@ jobs:
       - name: Compile every Python module
         run: |
           python3 -m compileall -q thadd || (python3 -m compileall thadd; exit 1)
+          # rea ships as an extensionless executable, so compileall never sees it:
+          # compile it by hand and require the version banner to answer.
+          python3 -c "import py_compile,sys; py_compile.compile('reverse-engineering/rea', doraise=True)"
+          ./reverse-engineering/rea --version
 
       - name: Forensics readers against known images
         run: python3 thadd/forensics/tests/test_triage.py

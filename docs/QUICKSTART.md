@@ -89,6 +89,7 @@ theme, so every application behaves natively.
 thadd doctor            # environment, tool groups, what is missing
 thadd-ai doctor         # the assistant's view: models, key, autonomy, tools
 thadd-scan --summary    # forensic snapshot of this machine
+rea --help              # reverse-engineer one file: identify, unpack, strings, report
 thadd --help            # the control centre
 ```
 

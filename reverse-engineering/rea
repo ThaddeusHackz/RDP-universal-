@@ -1,0 +1,1128 @@
+#!/usr/bin/env python3
+"""THADD OS · rea — reverse-engineer an artefact down to the byte, then say how you know.
+
+The login banner promises `rea --help`, so this has to be real and it has to work
+on a live ISO with no network and no extra packages: everything here is Python
+standard library.  Anything that needs a specialist tool (7z, binwalk, unsquashfs,
+upx) is used when the image has it and reported as "not installed" when it does not
+- the analysis degrades, it never pretends.
+
+    rea <file|dir> [more...]     identify, look for structure, and suggest next steps
+    rea --identify <file>        just what this is (magic, format, headers, hashes)
+    rea --strings <file>         interesting strings: URLs, keys, paths, commands
+    rea --unpack <file>          extract (into ./<name>.unpacked/ by default)
+    rea --electron <dir|asar>    unpack an Electron/Chromium app and read its main.js
+    rea --dotnet <file>          .NET/CLR assembly: streams, namespaces, entry point
+    rea --report <file>          full markdown report for an agent or an examiner
+    rea --json <file>            the same facts as JSON
+
+Options
+    --out DIR       where to unpack (default: <file>.unpacked next to the artefact)
+    --min N         minimum string length (default 6)
+    --max-mb N      analyse at most N MiB, to stay fast on disks (default 64)
+    --debug         show tracebacks instead of an honest one-line failure
+    --version       print the version
+    --help          this text
+
+Method (see FORENSIC_SCAN.md): look at the artefact, form a hypothesis, verify it
+against the bytes, and only then claim it - the discipline of morluto/rea
+("Reverse Engineered Anything", an MCP/agent toolkit).  Upstream `rea-agents`
+(MCP server + agent CLI) is installable on demand with `thadd-runtimes rea-agents`;
+this tool is the offline, always-present half of the same idea.
+
+Nothing in the artefact is ever executed, mounted or written to.
+"""
+
+from __future__ import annotations
+
+import argparse
+import binascii
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import zipfile
+
+VERSION = "1.0"
+MAX_ENTRIES = 20000          # refuse to explode a zip bomb into the filesystem
+MAX_UNPACK_BYTES = 512 * 1024 * 1024
+EXTERNAL = {                 # tool -> what its absence costs the user
+    "7z": "7z (p7zip-full) — .7z, .rar, .msi, .iso, and many firmware images",
+    "binwalk": "binwalk — signature scan and extraction of firmware images",
+    "unsquashfs": "squashfs-tools — .squashfs / .img filesystems",
+    "upx": "upx-ucl — decompressing UPX-packed binaries",
+    "cabextract": "cabextract — .cab archives",
+    "objdump": "binutils — disassembly and section dumps",
+    "readelf": "binutils — ELF section and symbol detail",
+    "strings": "binutils — GNU strings (a built-in extractor is used instead)",
+    "monodis": "mono-utils — IL disassembly of .NET assemblies",
+    "file": "file — the libmagic database (a built-in table is used instead)",
+}
+
+# --------------------------------------------------------------------- formatting
+class C:
+    on = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+    B = "\033[1m" if on else ""
+    D = "\033[2m" if on else ""
+    A = "\033[38;5;39m" if on else ""
+    G = "\033[38;5;42m" if on else ""
+    Y = "\033[38;5;214m" if on else ""
+    R = "\033[38;5;203m" if on else ""
+    N = "\033[0m" if on else ""
+
+
+def head(title: str) -> None:
+    print(f"\n{C.A}{C.B}{title}{C.N}")
+
+
+def kv(key: str, value) -> None:
+    print(f"  {key:<16} {value}")
+
+
+def note(text: str) -> None:
+    print(f"  {C.D}{text}{C.N}")
+
+
+def ok(text: str) -> None:
+    print(f"  {C.G}✓{C.N} {text}")
+
+
+def warn(text: str) -> None:
+    print(f"  {C.Y}!{C.N} {text}")
+
+
+def bad(text: str) -> None:
+    print(f"  {C.R}✗{C.N} {text}")
+
+
+def human(n: int) -> str:
+    step = 1024.0
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if n < step or unit == "TiB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= step
+    return f"{n} B"
+
+
+# ------------------------------------------------------------------------- helpers
+MAGIC = [
+    (b"\x7fELF", "ELF executable/library"),
+    (b"MZ", "DOS/PE image"),
+    (b"\xcf\xfa\xed\xfe", "Mach-O 64-bit little-endian"),
+    (b"\xce\xfa\xed\xfe", "Mach-O 32-bit little-endian"),
+    (b"\xfe\xed\xfa\xcf", "Mach-O 64-bit big-endian"),
+    (b"PK\x03\x04", "ZIP container"),
+    (b"PK\x05\x06", "ZIP container (empty)"),
+    (b"\x1f\x8b", "gzip stream"),
+    (b"BZh", "bzip2 stream"),
+    (b"\xfd7zXZ\x00", "xz stream"),
+    (b"(\xb5/\xfd", "zstd stream"),
+    (b"7z\xbc\xaf\x27\x1c", "7-Zip archive"),
+    (b"Rar!\x1a\x07", "RAR archive"),
+    (b"!<arch>\n", "ar archive (Debian .deb)"),
+    (b"hsqs", "squashfs filesystem"),
+    (b"sqsh", "squashfs filesystem (big-endian)"),
+    (b"\x45\x3d\xcd\x28", "cramfs filesystem"),
+    (b"CD001", "ISO9660 image"),
+    (b"\x89PNG\r\n\x1a\n", "PNG image"),
+    (b"\xff\xd8\xff", "JPEG image"),
+    (b"GIF8", "GIF image"),
+    (b"%PDF-", "PDF document"),
+    (b"SQLite format 3\x00", "SQLite database"),
+    (b"\x00asm", "WebAssembly module"),
+    (b"\xca\xfe\xba\xbe\x00\x00\x00", "Java class file"),
+    (b"dex\n", "Android DEX"),
+    (b"\x0a\x0d\x0d\x0a", "PCAP capture (or Java .class padding)"),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "OLE compound document (.doc/.msi)"),
+    (b"\x53\xef", "ext2/3/4 superblock (offset 1080)"),
+    (b"\xeb\x52\x90", "NTFS boot sector"),
+    (b"THADDOS\x00", "THADD OS artefact marker"),
+]
+
+HASH_LIMIT = 256 * 1024 * 1024
+
+
+def read_head(path: str, n: int = 64) -> bytes:
+    with open(path, "rb") as fh:
+        return fh.read(n)
+
+
+def sha256_of(path: str, limit: int = HASH_LIMIT) -> str:
+    h = hashlib.sha256()
+    read = 0
+    with open(path, "rb") as fh:
+        while True:
+            block = fh.read(1024 * 1024)
+            if not block or read >= limit:
+                break
+            h.update(block)
+            read += len(block)
+    return h.hexdigest()
+
+
+def entropy(data: bytes) -> float:
+    if not data:
+        return 0.0
+    counts = [0] * 256
+    for byte in data:
+        counts[byte] += 1
+    import math
+    total = len(data)
+    return -sum((c / total) * math.log2(c / total) for c in counts if c)
+
+
+def run_external(cmd: list, timeout: int = 60):
+    """Run a helper tool, never raising: (ok, output)."""
+    if not shutil.which(cmd[0]):
+        return False, ""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return proc.returncode == 0, (proc.stdout or "") + (proc.stderr or "")
+    except Exception as exc:  # pragma: no cover - defensive
+        return False, f"{cmd[0]}: {exc}"
+
+
+# ---------------------------------------------------------------------- identity
+def elf_info(data: bytes) -> dict:
+    info = {}
+    if len(data) < 64 or data[:4] != b"\x7fELF":
+        return info
+    ei_class, ei_data = data[4], data[5]
+    info["bits"] = 64 if ei_class == 2 else 32
+    little = ei_data == 1
+    info["endianness"] = "little" if little else "big"
+    end = "<" if little else ">"
+    e_type, e_machine = struct.unpack_from(end + "HH", data, 16)
+    info["machine"] = {0x3E: "x86-64", 0x03: "i386", 0xB7: "AArch64", 0x28: "ARM",
+                       0xF3: "RISC-V", 0x08: "MIPS", 0x14: "PowerPC"}.get(e_machine, f"0x{e_machine:x}")
+    info["type"] = {1: "relocatable object", 2: "executable", 3: "shared object (PIE or library)",
+                    4: "core dump"}.get(e_type, str(e_type))
+    if info["bits"] == 64:
+        info["entry"] = struct.unpack_from(end + "Q", data, 24)[0]
+        shoff, shentsize, shnum = struct.unpack_from(end + "QH H", data, 40)[0], \
+            struct.unpack_from(end + "H", data, 58)[0], struct.unpack_from(end + "H", data, 60)[0]
+    else:
+        info["entry"] = struct.unpack_from(end + "I", data, 24)[0]
+        shoff = struct.unpack_from(end + "I", data, 32)[0]
+        shentsize = struct.unpack_from(end + "H", data, 46)[0]
+        shnum = struct.unpack_from(end + "H", data, 48)[0]
+    info["sections"] = shnum
+    info["section_table_offset"] = shoff
+    interp = data.find(b"/lib64/ld-linux")
+    if interp == -1:
+        interp = data.find(b"/lib/ld-linux")
+    if interp != -1:
+        end_at = data.find(b"\x00", interp)
+        info["interpreter"] = data[interp:end_at].decode("ascii", "replace")
+    return info
+
+
+def pe_info(data: bytes) -> dict:
+    info = {}
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        return info
+    pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe_off:pe_off + 4] != b"PE\x00\x00":
+        return info
+    machine, num_sections = struct.unpack_from("<HH", data, pe_off + 4)
+    info["machine"] = {0x8664: "x86-64", 0x14C: "i386", 0xAA64: "AArch64",
+                       0x1C0: "ARM"}.get(machine, f"0x{machine:x}")
+    opt_size = struct.unpack_from("<H", data, pe_off + 20)[0]
+    opt = pe_off + 24
+    magic = struct.unpack_from("<H", data, opt)[0]
+    info["pe32"] = "PE32+" if magic == 0x20B else "PE32"
+    subsystem = struct.unpack_from("<H", data, opt + 68)[0] if opt_size >= 70 else 0
+    info["subsystem"] = {2: "GUI", 3: "console", 1: "native", 9: "Windows CE"}.get(subsystem, str(subsystem))
+    dllchar = struct.unpack_from("<H", data, opt + 70)[0] if opt_size >= 72 else 0
+    info["aslr"] = bool(dllchar & 0x40)
+    # data directories start at opt+96 in PE32+, opt+96 in PE32 too (after the
+    # standard+windows fields); the CLR entry is #15
+    dd = opt + (112 if magic == 0x20B else 96)
+    if len(data) > dd + 15 * 8 + 8:
+        clr_rva, clr_size = struct.unpack_from("<II", data, dd + 14 * 8)
+        if clr_rva and clr_size:
+            info["dotnet"] = True
+    info["sections"] = num_sections
+    names = []
+    off = opt + opt_size
+    for _ in range(min(num_sections, 24)):
+        raw = data[off:off + 8].split(b"\x00")[0]
+        names.append(raw.decode("ascii", "replace"))
+        off += 40
+    info["section_names"] = names
+    if ".NET" in " ".join(names) or info.get("dotnet"):
+        info["dotnet"] = True
+    return info
+
+
+def zip_kind(names) -> str:
+    joined = "\n".join(names[:400]).lower()
+    if "androidmanifest.xml" in joined:
+        return "Android APK"
+    if "meta-inf/manifest.mf" in joined and any(n.endswith(".class") for n in names):
+        return "Java JAR"
+    if ".dist-info/" in joined and any(n.endswith(".dist-info/wheel") for n in names):
+        return "Python wheel"
+    if "meta-inf/manifest.json" in joined and any(n.endswith(".js") for n in names):
+        return "browser extension (XPI/CRX)"
+    if any(n.startswith("word/") for n in names):
+        return "Office document (docx)"
+    if "content_types.xml" in joined:
+        return "Open XML/ODF package"
+    if "index.html" in joined and "assets/" in joined:
+        return "web application bundle"
+    return "ZIP archive"
+
+
+def identify(path: str, max_bytes: int) -> dict:
+    facts = {"path": os.path.abspath(path)}
+    st = os.stat(path)
+    facts["size"] = st.st_size
+    facts["size_human"] = human(st.st_size)
+    facts["mode"] = oct(st.st_mode & 0o7777)
+    facts["mtime"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime))
+    if os.path.isdir(path):
+        facts["kind"] = "directory"
+        return facts
+
+    facts["sha256"] = sha256_of(path)
+    with open(path, "rb") as fh:
+        data = fh.read(min(st.st_size, max_bytes))
+
+    facts["kind"] = "unknown"
+    for magic, label in MAGIC:
+        if data.startswith(magic):
+            facts["kind"] = label
+            break
+    if data.startswith(b"\xca\xfe\xba\xbe"):
+        # java .class and Mach-O fat binaries share this magic; the next uint32
+        # decides: a fat binary counts its architectures, a class file has a minor
+        # version (almost always 0) followed by a small major version.
+        second = struct.unpack_from(">I", data, 4)[0] if len(data) >= 8 else 0
+        if 1 <= second <= 25:
+            facts["kind"] = "Mach-O universal (fat) binary"
+        elif second == 0 and len(data) >= 8:
+            facts["kind"] = "Java class file"
+        else:
+            facts["kind"] = "Java class file (or fat Mach-O)"
+        facts["java_second_word"] = second
+    if data.startswith(b"\x53\xef") is False and len(data) > 1082 and data[1080:1082] == b"\x53\xef":
+        facts["kind"] = "ext2/3/4 filesystem image"
+
+    if looks_like_asar(data):
+        facts["kind"] = "Electron ASAR archive"
+
+    if facts["kind"] == "ELF executable/library":
+        facts["elf"] = elf_info(data)
+    elif facts["kind"].startswith("DOS/PE"):
+        facts["pe"] = pe_info(data)
+
+    # packed / high-entropy regions - a packer hides the real code
+    regions = []
+    block = 4096
+    scan = data[: min(len(data), 8 * 1024 * 1024)]
+    for off in range(0, len(scan), block):
+        ent = entropy(scan[off:off + block])
+        if ent > 7.5:
+            regions.append(off)
+    if regions:
+        facts["high_entropy_regions"] = len(regions)
+        facts["high_entropy_first"] = regions[0]
+    facts["entropy"] = round(entropy(scan[: 1 * 1024 * 1024]), 2) if scan else 0.0
+
+    marks = []
+    for needle, why in ((b"UPX!", "UPX packer"), (b"PyInstaller", "PyInstaller bundle"),
+                        (b"py2exe", "py2exe bundle"), (b"Go build ID", "Go binary"),
+                        (b"rustc", "Rust binary"), (b"mscoree.dll", ".NET runtime"),
+                        (b"__libc_start_main", "glibc"), (b"Electron", "Electron/Chromium"),
+                        (b"node_modules", "Node.js bundle"), (b"asar", "Electron ASAR"),
+                        (b"gzexe", "gzexe"), (b"$Info: This file is packed", "packed installer")):
+        if needle in data:
+            marks.append(why)
+    if marks:
+        facts["markers"] = sorted(set(marks))
+
+    if data[:4] in (b"PK\x03\x04", b"PK\x05\x06"):
+        try:
+            with zipfile.ZipFile(path) as zf:
+                names = zf.namelist()
+            facts["zip_entries"] = len(names)
+            facts["zip_kind"] = zip_kind(names)
+            facts["zip_sample"] = names[:12]
+        except Exception as exc:
+            facts["zip_error"] = str(exc)
+    elif data.startswith(b"!<arch>\n"):
+        try:
+            facts["ar_members"] = ar_members(data)
+        except Exception as exc:
+            facts["ar_error"] = str(exc)
+    return facts
+
+
+def ar_members(data: bytes) -> list:
+    members = []
+    off = 8
+    while off + 60 <= len(data) and len(members) < 200:
+        header = data[off:off + 60]
+        if header[58:60] != b"`\n":
+            break
+        name = header[:16].decode("ascii", "replace").strip()
+        size = int(header[48:58].decode("ascii", "replace").strip() or 0)
+        members.append({"name": name, "offset": off + 60, "size": size})
+        off += 60 + size + (size % 2)
+    return members
+
+
+# ---------------------------------------------------------------------- strings
+STR_RE = re.compile(rb"[\x20-\x7e]{6,}")
+UTF16_RE = re.compile((rb"(?:[\x20-\x7e]\x00){6,}"))
+
+INTERESTING = [
+    ("URL", re.compile(r"https?://[^\s\"'<>]{4,120}")),
+    ("IPv4", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
+    ("email", re.compile(r"[A-Za-z0-9._%+-]{2,}@[A-Za-z0-9.-]{2,}\.[A-Za-z]{2,10}")),
+    ("AWS key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("GitHub token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b|github_pat_[A-Za-z0-9_]{20,}")),
+    ("OpenAI/Groq key", re.compile(r"\b(?:sk|gsk)_(?:live_|test_|proj_)?[A-Za-z0-9]{20,}\b")),
+    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
+    ("Slack token", re.compile(r"\bxox[abps]-[A-Za-z0-9-]{10,}\b")),
+    ("JWT", re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")),
+    ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("password-ish", re.compile(r"(?i)\b(?:passwd|password|passphrase|secret|api[_-]?key|token)\b\s*[:=]\s*\S{3,60}")),
+    ("registry key", re.compile(r"(?i)\bHKLM\\[A-Za-z0-9\\ ]{3,80}|\bHKCU\\[A-Za-z0-9\\ ]{3,80}")),
+    ("windows path", re.compile(r"(?i)\b[A-Z]:\\\\(?:Program Files|Users|Windows)[^\"'<>|]{0,80}")),
+    ("unix path", re.compile(r"/(?:etc|usr|var|opt|home|root|tmp)/[A-Za-z0-9._/\-]{2,80}")),
+    ("shell command", re.compile(r"(?m)^\s*(?:curl|wget|chmod|bash|sh|powershell|invoke-|certutil|bitsadmin|rundll32)\b.{0,100}")),
+    ("user agent", re.compile(r"Mozilla/\d\.\d [^\n]{0,80}")),
+]
+
+
+def extract_strings(path: str, min_len: int, max_bytes: int) -> dict:
+    with open(path, "rb") as fh:
+        data = fh.read(max_bytes)
+    ascii_strs = [m.group().decode("ascii", "replace") for m in STR_RE.finditer(data)]
+    utf16_strs = [m.group().decode("utf-16-le", "replace") for m in UTF16_RE.finditer(data)]
+    ascii_strs = [s for s in ascii_strs if len(s) >= min_len]
+    utf16_strs = [s for s in utf16_strs if len(s) >= min_len]
+
+    found = {}
+    for label, pattern in INTERESTING:
+        hits = set()
+        for text in ascii_strs + utf16_strs:
+            for m in pattern.finditer(text):
+                hits.add(m.group()[:160])
+                if len(hits) >= 12:
+                    break
+            if len(hits) >= 12:
+                break
+        if hits:
+            found[label] = sorted(hits)
+    return {"ascii": len(ascii_strs), "utf16": len(utf16_strs),
+            "sample": ascii_strs[:40], "interesting": found,
+            "all_ascii": ascii_strs if len(ascii_strs) <= 4000 else ascii_strs[:4000]}
+
+
+# ----------------------------------------------------------------------- unpack
+def safe_join(root: str, name: str) -> str:
+    """Join, and refuse anything that climbs out of the output directory.
+
+    Both sides are made absolute first: comparing a relative target against an
+    absolute root rejected perfectly safe names (the bug that made `--out dir`
+    fail while the default path worked).
+    """
+    base = os.path.abspath(root)
+    target = os.path.abspath(os.path.join(base, name.lstrip("/\\")))
+    if target != base and not target.startswith(base + os.sep):
+        raise ValueError(f"refusing to write outside the output directory: {name}")
+    return target
+
+
+def unpack_zip(path: str, out: str, log: list) -> None:
+    with zipfile.ZipFile(path) as zf:
+        members = zf.infolist()
+        if len(members) > MAX_ENTRIES:
+            log.append(f"  {len(members)} entries — extracting the first {MAX_ENTRIES}")
+        total = 0
+        for info in members[:MAX_ENTRIES]:
+            if info.is_dir():
+                continue
+            total += info.file_size
+            if total > MAX_UNPACK_BYTES:
+                log.append(f"  stopping at {human(MAX_UNPACK_BYTES)} of 1.5 GiB+ of content")
+                break
+            dest = safe_join(out, info.filename)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with zf.open(info) as src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+
+
+def unpack_tar(path: str, out: str, log: list) -> None:
+    with tarfile.open(path, "r:*") as tf:
+        members = [m for m in tf.getmembers() if m.isfile() or m.isdir()]
+        if len(members) > MAX_ENTRIES:
+            log.append(f"  {len(members)} entries — extracting the first {MAX_ENTRIES}")
+        total = 0
+        for member in members[:MAX_ENTRIES]:
+            if not member.isfile():
+                continue
+            total += member.size
+            if total > MAX_UNPACK_BYTES:
+                log.append(f"  stopping at {human(MAX_UNPACK_BYTES)} of 1.5 GiB+ of content")
+                break
+            dest = safe_join(out, member.name)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            src = tf.extractfile(member)
+            if src is None:
+                continue
+            with src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+
+
+def unpack_ar(path: str, out: str, log: list, max_bytes: int = 256 * 1024 * 1024) -> list:
+    data = read_head(path, max_bytes)
+    members = ar_members(data)
+    nested = []
+    for member in members:
+        payload = data[member["offset"]:member["offset"] + member["size"]]
+        dest = safe_join(out, member["name"])
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "wb") as fh:
+            fh.write(payload)
+        log.append(f"  {member['name']} ({human(member['size'])})")
+        if member["name"].startswith("data.tar"):
+            nested.append(dest)
+    return nested
+
+
+def asar_parse(path: str):
+    """Return (header dict, payload offset) for an Electron ASAR archive.
+
+    The on-disk layout is Chromium's Pickle, twice nested:
+        [uint32 = 4][uint32 header_pickle_size]
+        [uint32 json_length][json… padded to 4 bytes]      <- the header pickle
+        [file data…]                                        <- offsets are relative to here
+    Getting this wrong yields an empty listing rather than an error, so the sizes
+    are validated before anything is parsed.
+    """
+    with open(path, "rb") as fh:
+        first = fh.read(8)
+        if len(first) < 8:
+            raise ValueError("not an ASAR: file is too short")
+        marker, size = struct.unpack("<II", first)
+        if marker != 4 or not 8 <= size <= 32 * 1024 * 1024:
+            raise ValueError(f"not an ASAR: header size field is {size}")
+        fh.seek(8)
+        pickle_blob = fh.read(size)
+    if len(pickle_blob) < 8:
+        raise ValueError("not an ASAR: the header pickle is too short")
+    # the header pickle is [uint32 payload_size][uint32 json_length][json][pad],
+    # and asar reads file data at `8 + headerSize + offset` (lib/disk.js)
+    payload_size = struct.unpack_from("<I", pickle_blob, 0)[0]
+    json_len = struct.unpack_from("<I", pickle_blob, 4)[0]
+    if json_len < 2 or json_len > payload_size or json_len > len(pickle_blob) - 8:
+        raise ValueError("not an ASAR: the header does not contain a JSON string")
+    text = pickle_blob[8:8 + json_len].decode("utf-8", "replace")
+    return json.loads(text), 8 + size
+
+
+def looks_like_asar(data: bytes) -> bool:
+    """An ASAR opens with [4][headerSize][payloadSize][jsonLength] and then the JSON."""
+    if len(data) < 17:
+        return False
+    marker, size, payload_size, json_len = struct.unpack_from("<IIII", data, 0)
+    return (marker == 4 and 8 <= size <= 32 * 1024 * 1024
+            and json_len >= 2 and json_len <= payload_size <= size
+            and data[16:17] == b"{")
+
+
+def asar_walk(node: dict, prefix: str = ""):
+    for name, child in (node.get("files") or {}).items():
+        here = f"{prefix}{name}"
+        if "files" in child:
+            yield from asar_walk(child, here + "/")
+        else:
+            yield here, child
+
+
+def unpack_asar(path: str, out: str, log: list) -> None:
+    header, base = asar_parse(path)
+    entries = list(asar_walk(header))
+    with open(path, "rb") as fh:
+        for name, meta in entries:
+            offset = meta.get("offset")
+            size = meta.get("size", 0)
+            if offset is None:
+                continue
+            fh.seek(base + int(offset))
+            payload = fh.read(int(size))
+            dest = safe_join(out, name)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb") as dst:
+                dst.write(payload)
+    log.append(f"  {len(entries)} file(s) from the ASAR header")
+
+
+def unpack_single_stream(path: str, out: str, log: list, max_bytes: int) -> bool:
+    """gzip/bzip2/xz single-file streams, decompressed in chunks with a size cap."""
+    import bz2
+    import gzip
+    import lzma
+
+    magic = read_head(path, 6)
+    name = os.path.basename(path)
+    opener = None
+    out_name = name + ".out"
+    if name.endswith((".gz", ".tgz")) or magic.startswith(b"\x1f\x8b"):
+        opener, out_name = gzip.open, (name[:-3] if name.endswith(".gz") else name + ".out")
+    elif magic.startswith(b"BZh") or name.endswith(".bz2"):
+        opener, out_name = bz2.open, (name[:-4] if name.endswith(".bz2") else name + ".out")
+    elif magic.startswith(b"\xfd7zXZ\x00") or name.endswith(".xz"):
+        opener, out_name = lzma.open, (name[:-3] if name.endswith(".xz") else name + ".out")
+    if opener is None:
+        return False
+    dest = safe_join(out, out_name)
+    written = 0
+    truncated = False
+    try:
+        with opener(path, "rb") as src, open(dest, "wb") as dst:
+            while True:
+                block = src.read(1024 * 1024)
+                if not block:
+                    break
+                if written + len(block) > max_bytes:
+                    dst.write(block[: max_bytes - written])
+                    truncated = True
+                    break
+                dst.write(block)
+                written += len(block)
+    except Exception as exc:
+        log.append(f"  {name}: {exc}")
+        return False
+    if truncated:
+        log.append(f"  {name}: stopped at the {human(max_bytes)} cap (use --max-mb to raise it)")
+    log.append(f"  {out_name} ({human(written)})")
+    return True
+
+
+def do_unpack(path: str, out: str, max_bytes: int) -> dict:
+    result = {"out": out, "handled": [], "log": [], "external": [], "nested": []}
+    os.makedirs(out, exist_ok=True)
+    head_bytes = read_head(path, 8)
+    name = os.path.basename(path)
+    handled = False
+
+    try:
+        if head_bytes.startswith(b"PK\x03\x04") or head_bytes.startswith(b"PK\x05\x06"):
+            unpack_zip(path, out, result["log"])
+            result["handled"].append("zip")
+            handled = True
+        elif looks_like_asar(read_head(path, 32)):
+            asar_parse(path)
+            unpack_asar(path, out, result["log"])
+            result["handled"].append("asar")
+            handled = True
+        elif head_bytes.startswith(b"!<arch>\n"):
+            nested = unpack_ar(path, out, result["log"], max_bytes)
+            result["handled"].append("ar")
+            handled = True
+            for member in nested:
+                sub_out = member + ".unpacked"
+                sub = do_unpack(member, sub_out, max_bytes)
+                result["nested"].append({"member": os.path.basename(member), **sub})
+        else:
+            try:
+                if tarfile.is_tarfile(path):
+                    unpack_tar(path, out, result["log"])
+                    result["handled"].append("tar")
+                    handled = True
+            except Exception as exc:
+                result["log"].append(f"  tar: {exc}")
+            if not handled:
+                handled = unpack_single_stream(path, out, result["log"], max_bytes)
+                if handled:
+                    result["handled"].append("stream")
+    except Exception as exc:
+        result["log"].append(f"  {os.path.basename(path)}: {exc}")
+
+    if not handled:
+        for tool, args in (("7z", ["x", "-y", f"-o{out}"]), ("upx", ["-d", "-o", out]),
+                           ("unsquashfs", ["-d", out])):
+            if shutil.which(tool):
+                target = list(args)
+                if tool == "upx":
+                    target = ["-d", "-f", "-o", os.path.join(out, name + ".unpacked"), path]
+                else:
+                    target = args + [path]
+                good, output = run_external([tool] + target, timeout=180)
+                if good:
+                    result["handled"].append(tool)
+                    result["external"].append(tool)
+                    handled = True
+                    break
+                result["log"].append(f"  {tool}: {output.strip().splitlines()[-1][:120] if output.strip() else 'failed'}")
+
+    if not handled:
+        result["handled"].append("none")
+    return result
+
+
+# ------------------------------------------------------------------- electron/re
+def electron_analysis(target: str, out: str, max_bytes: int) -> dict:
+    """Electron app: find the ASAR, unpack it, read package.json and the main script."""
+    result = {"asar": None, "out": out, "files": 0, "package": None, "findings": [], "native": []}
+    asar_path = None
+    if os.path.isfile(target) and looks_like_asar(read_head(target, 32)):
+        asar_path = target
+    elif os.path.isdir(target):
+        for root, dirs, files in os.walk(target):
+            if "app.asar" in files:
+                asar_path = os.path.join(root, "app.asar")
+                break
+            if "resources" in dirs and os.path.exists(os.path.join(root, "resources", "app")):
+                result["unpacked_app"] = os.path.join(root, "resources", "app")
+    if asar_path is None and result.get("unpacked_app"):
+        result["files"] = sum(len(f) for _, _, f in os.walk(result["unpacked_app"]))
+        result["findings"].append(f"app is already unpacked at {result['unpacked_app']}")
+        return result
+    if asar_path is None:
+        result["findings"].append("no app.asar found: this is not an Electron app (or it is packed inside an archive — unpack it first)")
+        return result
+
+    result["asar"] = asar_path
+    header, _ = asar_parse(asar_path)
+    entries = [name for name, _ in asar_walk(header)]
+    result["files"] = len(entries)
+    dest = os.path.join(out, "app")
+    os.makedirs(dest, exist_ok=True)
+    unpack_asar(asar_path, dest, result.setdefault("log", []))
+    result["unpacked_app"] = dest
+
+    pkg = os.path.join(dest, "package.json")
+    if os.path.exists(pkg):
+        try:
+            with open(pkg, encoding="utf-8", errors="replace") as fh:
+                data = json.load(fh)
+            result["package"] = {k: data.get(k) for k in
+                                 ("name", "version", "description", "main", "author", "license") if data.get(k)}
+            deps = list((data.get("dependencies") or {}))
+            result["dependencies"] = deps[:60]
+            result["scripts"] = list((data.get("scripts") or {}))
+        except Exception as exc:
+            result["findings"].append(f"package.json is not readable JSON: {exc}")
+
+    for root, _dirs, files in os.walk(dest):
+        for fname in files:
+            if fname.endswith((".node", ".dll", ".so", ".dylib")):
+                result["native"].append(os.path.relpath(os.path.join(root, fname), dest))
+
+    main_scripts = [n for n in entries if n.endswith((".js", ".mjs", ".cjs"))][:5]
+    interesting = {}
+    for rel in main_scripts:
+        full = os.path.join(dest, rel)
+        if not os.path.exists(full):
+            continue
+        try:
+            strings = extract_strings(full, 6, min(max_bytes, 32 * 1024 * 1024))["interesting"]
+        except Exception:
+            continue
+        for label, hits in strings.items():
+            interesting.setdefault(label, [])
+            for hit in hits[:6]:
+                if hit not in interesting[label]:
+                    interesting[label].append(hit)
+    result["script_findings"] = interesting
+    return result
+
+
+def dotnet_analysis(path: str, max_bytes: int) -> dict:
+    result = {"findings": []}
+    data = read_head(path, min(max_bytes, 64 * 1024 * 1024))
+    pe = pe_info(data)
+    result["pe"] = pe
+    if not pe.get("dotnet"):
+        result["findings"].append("no CLR data directory: this is not a .NET assembly")
+        return result
+    result["findings"].append("CLR header present — managed assembly")
+    strings = extract_strings(path, 5, max_bytes)["interesting"]
+    result["strings"] = strings
+    namespaces = set()
+    for hit in (strings.get("unix path") or []) + (strings.get("URL") or []):
+        namespaces.add(hit)
+    # .NET metadata streams live in plain sight in the #~ / #Strings streams
+    for stream in (b"#~", b"#Strings", b"#US", b"#GUID", b"#Blob", b"mscorlib", b"System.Private.CoreLib"):
+        if stream in data:
+            result.setdefault("streams", []).append(stream.decode("ascii"))
+    for tool in ("monodis", "ilspycmd"):
+        if shutil.which(tool) and tool == "monodis":
+            good, output = run_external([tool, "--output=/dev/stdout", path], timeout=60)
+            if good and output:
+                result["il_sample"] = "\n".join(output.splitlines()[:25])
+    return result
+
+
+# ----------------------------------------------------------------------- report
+def report_markdown(facts: dict, strings: dict, unpack: dict, extra: dict) -> str:
+    lines = []
+    lines.append(f"# rea report — {os.path.basename(facts['path'])}")
+    lines.append("")
+    lines.append(f"Generated by `rea {VERSION}` on THADD OS at {time.strftime('%Y-%m-%d %H:%M:%S')}.")
+    lines.append("The artefact was read only: it was never executed, mounted or modified.")
+    lines.append("")
+    lines.append("## Identification")
+    lines.append("")
+    lines.append("| Field | Value |")
+    lines.append("| --- | --- |")
+    for key in ("path", "kind", "size_human", "size", "sha256", "mtime", "entropy"):
+        if key in facts:
+            lines.append(f"| {key} | `{facts[key]}` |")
+    if facts.get("markers"):
+        lines.append(f"| markers | {', '.join(facts['markers'])} |")
+    for section in ("elf", "pe"):
+        if facts.get(section):
+            for key, value in facts[section].items():
+                lines.append(f"| {section}.{key} | `{value}` |")
+    lines.append("")
+    if facts.get("zip_entries") is not None:
+        lines.append("## Container")
+        lines.append("")
+        lines.append(f"* kind: **{facts.get('zip_kind', 'ZIP')}**, {facts['zip_entries']} entries")
+        for name in facts.get("zip_sample", []):
+            lines.append(f"  * `{name}`")
+        lines.append("")
+    if facts.get("ar_members"):
+        lines.append("## ar/deb members")
+        lines.append("")
+        for member in facts["ar_members"]:
+            lines.append(f"* `{member['name']}` — {human(member['size'])}")
+        lines.append("")
+    if strings:
+        lines.append("## Strings")
+        lines.append("")
+        lines.append(f"{strings['ascii']} ASCII and {strings['utf16']} UTF-16 strings "
+                     f"of at least the requested length.")
+        lines.append("")
+        for label, hits in (strings.get("interesting") or {}).items():
+            lines.append(f"**{label}**")
+            lines.append("")
+            for hit in hits:
+                lines.append(f"* `{hit}`")
+            lines.append("")
+    if unpack and unpack.get("handled"):
+        lines.append("## Extraction")
+        lines.append("")
+        lines.append(f"* handled as: {', '.join(unpack['handled'])}")
+        lines.append(f"* output: `{unpack.get('out')}`")
+        for entry in unpack.get("log", [])[:40]:
+            lines.append(f"  * {entry.strip()}")
+        lines.append("")
+        for nested in unpack.get("nested", []) or []:
+            lines.append(f"* nested `{nested.get('member')}` -> {', '.join(nested.get('handled', []))}")
+        lines.append("")
+    if extra:
+        lines.append("## Specific analysis")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(extra, indent=2, default=str)[:8000])
+        lines.append("```")
+        lines.append("")
+    lines.append("## Method")
+    lines.append("")
+    lines.append("Look at the artefact, form a hypothesis, verify it against the bytes, and only")
+    lines.append("then claim it — the discipline of morluto/rea. Anything not verified above is")
+    lines.append("not claimed: this report contains observations, not conclusions.")
+    lines.append("")
+    lines.append("## Missing tools worth installing")
+    lines.append("")
+    missing = [why for tool, why in EXTERNAL.items() if not shutil.which(tool)]
+    if missing:
+        for why in missing:
+            lines.append(f"* {why}")
+        lines.append("")
+        lines.append("Install them with `thadd-toolbox offensive` inside THADD OS.")
+    else:
+        lines.append("None — every optional helper in this tool's inventory is installed.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------------- modes
+def mode_identify(path: str, args) -> int:
+    facts = identify(path, args.max_mb * 1024 * 1024)
+    if args.json:
+        print(json.dumps(facts, indent=2, default=str))
+        return 0
+    head(f"rea — {os.path.basename(path)}")
+    kv("path", facts["path"])
+    kv("size", f"{facts['size_human']} ({facts['size']} bytes)")
+    kv("kind", facts["kind"])
+    if facts.get("sha256"):
+        kv("sha256", facts["sha256"])
+    kv("entropy", facts.get("entropy"))
+    if facts.get("high_entropy_regions"):
+        warn(f"{facts['high_entropy_regions']} high-entropy 4 KiB block(s), "
+             f"first at offset {facts['high_entropy_first']} — packed or encrypted?")
+    for section in ("elf", "pe"):
+        if facts.get(section):
+            for key, value in facts[section].items():
+                kv(f"{section}.{key}", value)
+    if facts.get("markers"):
+        ok("markers: " + ", ".join(facts["markers"]))
+    if facts.get("zip_entries") is not None:
+        kv("container", f"{facts.get('zip_kind')} — {facts['zip_entries']} entries")
+        for name in facts.get("zip_sample", [])[:6]:
+            note(name)
+    if facts.get("ar_members"):
+        kv("ar members", ", ".join(m["name"] for m in facts["ar_members"]))
+    return 0
+
+
+def mode_strings(path: str, args) -> int:
+    strings = extract_strings(path, args.min, args.max_mb * 1024 * 1024)
+    if args.json:
+        print(json.dumps(strings, indent=2, default=str))
+        return 0
+    head(f"rea --strings — {os.path.basename(path)}")
+    kv("ascii", strings["ascii"])
+    kv("utf-16", strings["utf16"])
+    if not strings["interesting"]:
+        note("no URLs, keys, paths or commands matched — this is not unusual for code that")
+        note("has been stripped or packed; try rea --identify first.")
+    for label, hits in strings["interesting"].items():
+        head(label)
+        for hit in hits:
+            print(f"    {hit}")
+    return 0
+
+
+def mode_unpack(path: str, args) -> int:
+    out = args.out or (path + ".unpacked")
+    result = do_unpack(path, out, args.max_mb * 1024 * 1024)
+    if args.json:
+        print(json.dumps(result, indent=2, default=str))
+        return 0
+    head(f"rea --unpack — {os.path.basename(path)}")
+    kv("handled as", ", ".join(result["handled"]))
+    kv("output", out)
+    for line in result["log"][:40]:
+        note(line.strip())
+    for nested in result.get("nested", []) or []:
+        ok(f"nested {nested.get('member')} -> {', '.join(nested.get('handled', []))}")
+    if result["handled"] == ["none"]:
+        bad("nothing in this tool's inventory matched")
+        note("Install the missing helpers listed by `rea --report`, or try `7z x` yourself.")
+        return 1
+    count = sum(len(files) for _r, _d, files in os.walk(out))
+    ok(f"{count} file(s) written to {out}")
+    return 0
+
+
+def mode_electron(path: str, args) -> int:
+    out = args.out or (os.path.abspath(path) + ".rea")
+    result = electron_analysis(path, out, args.max_mb * 1024 * 1024)
+    if args.json:
+        print(json.dumps(result, indent=2, default=str))
+        return 0
+    head(f"rea --electron — {os.path.basename(path)}")
+    if result.get("asar"):
+        kv("asar", result["asar"])
+        kv("files", result["files"])
+    if result.get("package"):
+        for key, value in result["package"].items():
+            kv(f"package.{key}", value)
+    if result.get("dependencies"):
+        kv("dependencies", ", ".join(result["dependencies"][:20]))
+    if result.get("native"):
+        warn("native modules: " + ", ".join(result["native"][:10]))
+    if result.get("unpacked_app"):
+        ok(f"unpacked to {result['unpacked_app']}")
+    for label, hits in (result.get("script_findings") or {}).items():
+        head(label)
+        for hit in hits:
+            print(f"    {hit}")
+    return 0 if result.get("asar") else 1
+
+
+def mode_dotnet(path: str, args) -> int:
+    result = dotnet_analysis(path, args.max_mb * 1024 * 1024)
+    if args.json:
+        print(json.dumps(result, indent=2, default=str))
+        return 0
+    head(f"rea --dotnet — {os.path.basename(path)}")
+    for finding in result["findings"]:
+        ok(finding)
+    if result.get("streams"):
+        kv("metadata", ", ".join(result["streams"]))
+    if result.get("pe"):
+        kv("pe", json.dumps(result["pe"], default=str)[:160])
+    for label, hits in (result.get("strings") or {}).items():
+        head(label)
+        for hit in hits[:8]:
+            print(f"    {hit}")
+    if result.get("il_sample"):
+        head("IL (monodis)")
+        print(result["il_sample"])
+    return 0
+
+
+def mode_report(path: str, args) -> int:
+    facts = identify(path, args.max_mb * 1024 * 1024)
+    strings = extract_strings(path, args.min, args.max_mb * 1024 * 1024) if not os.path.isdir(path) else {}
+    unpack = {}
+    extra = {}
+    if args.unpack_then_report and not os.path.isdir(path):
+        # --out names the *report* in this mode, so the extraction gets its own
+        # directory instead of being handed the report's path.
+        extract_dir = (args.out + ".files") if args.out else (path + ".unpacked")
+        unpack = do_unpack(path, extract_dir, args.max_mb * 1024 * 1024)
+    if facts.get("pe", {}).get("dotnet"):
+        extra["dotnet"] = dotnet_analysis(path, args.max_mb * 1024 * 1024)
+    text = report_markdown(facts, strings, unpack, extra)
+    out = args.out or f"rea-report-{os.path.basename(path)}-{time.strftime('%Y%m%d-%H%M%S')}.md"
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    if args.json:
+        print(json.dumps({"report": out, "facts": facts}, indent=2, default=str))
+    else:
+        head("rea --report")
+        kv("artefact", facts["path"])
+        kv("kind", facts["kind"])
+        ok(f"report written to {out}")
+        note("the report says what was observed and which tools were missing — nothing more")
+    return 0
+
+
+def mode_auto(paths: list, args) -> int:
+    worst = 0
+    for path in paths:
+        if not os.path.exists(path):
+            bad(f"no such file or directory: {path}")
+            worst = 1
+            continue
+        if os.path.isdir(path):
+            head(f"rea — {path}")
+            kv("kind", "directory")
+            counts = {}
+            total = 0
+            walk_done = True
+            for root, dirs, files in os.walk(path):
+                for fname in files:
+                    ext = os.path.splitext(fname)[1].lower() or "(no extension)"
+                    counts[ext] = counts.get(ext, 0) + 1
+                    total += 1
+                if total > 20000:
+                    walk_done = False
+                    break
+            kv("files", total if walk_done else f"{total}+ (walk stopped)")
+            kv("by type", ", ".join(f"{k}×{v}" for k, v in
+                                    sorted(counts.items(), key=lambda item: -item[1])[:8]))
+            hints = []
+            for root, _dirs, files in os.walk(path):
+                if "app.asar" in files:
+                    hints.append(f"Electron app: rea --electron {os.path.join(root, 'app.asar')}")
+                if "package.json" in files and any(f.endswith((".asar", ".js")) for f in files):
+                    hints.append(f"Node/Electron project: {os.path.join(root, 'package.json')}")
+                if len(hints) >= 3:
+                    break
+            for hint in hints:
+                note(hint)
+            continue
+        facts = identify(path, args.max_mb * 1024 * 1024)
+        head(f"rea — {os.path.basename(path)}")
+        kv("kind", facts["kind"])
+        kv("size", facts["size_human"])
+        if facts.get("sha256"):
+            kv("sha256", facts["sha256"][:32] + "…")
+        if facts.get("zip_kind"):
+            ok(f"{facts['zip_kind']} — {facts.get('zip_entries')} entries")
+        if facts.get("elf", {}).get("interpreter"):
+            note("dynamic executable — try: rea --strings " + os.path.basename(path))
+        if facts.get("pe", {}).get("dotnet"):
+            note("managed .NET assembly — try: rea --dotnet " + os.path.basename(path))
+        if facts.get("kind") == "Electron ASAR archive":
+            note("Electron app — try: rea --electron " + os.path.basename(path))
+        if facts.get("kind") in ("ZIP container", "ar archive (Debian .deb)"):
+            note("container — try: rea --unpack " + os.path.basename(path))
+        print()
+        note("next: rea --identify · --strings · --unpack · --report (add --report for an")
+        note("      agent-ready markdown file; every mode accepts --json)")
+    return worst
+
+
+# -------------------------------------------------------------------------- main
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="rea", description="Reverse-engineer an artefact down to the byte (THADD OS).",
+        formatter_class=argparse.RawDescriptionHelpFormatter, add_help=True)
+    parser.add_argument("targets", nargs="*", help="files or directories to examine")
+    parser.add_argument("--identify", "-i", action="store_true", help="identify only")
+    parser.add_argument("--strings", "-s", action="store_true", help="extract interesting strings")
+    parser.add_argument("--unpack", "-x", action="store_true", help="extract the container")
+    parser.add_argument("--electron", action="store_true", help="analyse an Electron/Chromium app")
+    parser.add_argument("--dotnet", action="store_true", help="analyse a .NET assembly")
+    parser.add_argument("--report", "-r", action="store_true", help="write a markdown report")
+    parser.add_argument("--unpack-then-report", action="store_true",
+                        help="with --report: extract first, and describe the extraction")
+    parser.add_argument("--out", "-o", default=None,
+                        help="output directory (--unpack/--electron) or report file (--report)")
+    parser.add_argument("--min", type=int, default=6, help="minimum string length (default 6)")
+    parser.add_argument("--max-mb", type=int, default=64, help="analysis cap in MiB (default 64)")
+    parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument("--debug", action="store_true", help="show tracebacks")
+    parser.add_argument("--version", action="version", version=f"rea {VERSION} (THADD OS)")
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.targets:
+        parser.print_help()
+        print("\n  THADD OS: the method this follows is documented in FORENSIC_SCAN.md;")
+        print("  `rea --report <file>` writes the agent-ready version of the analysis.")
+        return 2
+    for path in args.targets:
+        if not os.path.exists(path):
+            bad(f"no such file or directory: {path}")
+            return 1
+
+    which = [m for m in ("identify", "strings", "unpack", "electron", "dotnet", "report")
+             if getattr(args, m)]
+    if len(which) > 1:
+        bad(f"choose one mode, not {len(which)}: {' '.join('--' + w for w in which)}")
+        return 2
+    mode = which[0] if which else "auto"
+    try:
+        if mode == "identify":
+            return mode_identify(args.targets[0], args)
+        if mode == "strings":
+            return mode_strings(args.targets[0], args)
+        if mode == "unpack":
+            return mode_unpack(args.targets[0], args)
+        if mode == "electron":
+            return mode_electron(args.targets[0], args)
+        if mode == "dotnet":
+            return mode_dotnet(args.targets[0], args)
+        if mode == "report":
+            return mode_report(args.targets[0], args)
+        return mode_auto(args.targets, args)
+    except KeyboardInterrupt:
+        bad("interrupted")
+        return 130
+    except Exception as exc:
+        if args.debug:
+            raise
+        bad(f"{type(exc).__name__}: {exc}")
+        note("re-run with --debug for the traceback; this tool never modifies the artefact")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

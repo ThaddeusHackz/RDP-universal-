@@ -233,6 +233,7 @@ case "$MODE" in
         echo "     · thadd-ai chat      Groq-powered assistant for this machine"
         echo "     · thadd-scan         forensic snapshot of this system"
         echo "     · thadd-toolbox      install offensive/RE tools on demand"
+        echo "     · rea --help         reverse engineering (binaries/Electron/.NET)"
         echo "     · thadd-ssh on       enable remote shell (off by default)"
         exit 0
         ;;
@@ -353,7 +354,8 @@ def main() -> int:
                      # the sets are staged under /opt/thadd/iso-packages/ and the
                      # 0000 hook copies them to /usr/share/thadd/packages/ in the
                      # chroot - assert the layer that actually carries them
-                     "opt/thadd/iso-packages/optional-security.txt"):
+                     "opt/thadd/iso-packages/optional-security.txt",
+                     "opt/thadd/reverse-engineering/rea"):
             check(f"overlay has /{want}", (overlay / want).exists())
         for doubled in ("etc/skel/skel", "usr/local/local", "opt/thadd/tools/tools", "opt/thadd/ai/ai",
                         "opt/thadd/app/thadd/thadd"):
@@ -362,7 +364,8 @@ def main() -> int:
         for tool in ("usr/local/bin/thadd-ai", "usr/local/bin/thadd-scan",
                      "usr/local/bin/thadd", "usr/local/bin/thadd-toolbox",
                      "opt/thadd/security/thadd-scan", "opt/thadd/tools/bin/thadd-apt-safe",
-                     "opt/thadd/desktop/thadd-desktop-selftest"):
+                     "opt/thadd/desktop/thadd-desktop-selftest",
+                     "opt/thadd/reverse-engineering/rea"):
             path = overlay / tool
             check(f"/{tool} is executable", path.exists() and os.access(path, os.X_OK))
 
@@ -383,6 +386,34 @@ def main() -> int:
                                  capture_output=True, text=True, timeout=120)
         check("staged `thadd-toolbox --list` reads the shipped set lists", proc_tb.returncode == 0,
               (proc_tb.stdout + proc_tb.stderr)[-200:])
+
+        # rea has to be more than present: it must read a real container.  Build a
+        # genuine Electron ASAR (the layout asar and chromium-pickle-js write:
+        # [4][headerSize][payloadSize][jsonLength][json][data]) and require the
+        # extracted file to come back byte for byte.
+        import json as _json
+        import struct as _struct
+        payload = b"const k='gsk_" + b"a" * 30 + b"';\n"
+        header = _json.dumps({"files": {"main.js": {"size": len(payload), "offset": "0"}}}).encode()
+        padded = header + b"\x00" * ((-len(header)) % 4)
+        header_pickle = _struct.pack("<I", 4 + len(padded)) + _struct.pack("<I", len(header)) + padded
+        asar_bytes = _struct.pack("<I", 4) + _struct.pack("<I", len(header_pickle)) + header_pickle + payload
+        asar_path = tmp / "fixture.asar"
+        asar_path.write_bytes(asar_bytes)
+        extracted = tmp / "fixture.asar.unpacked"
+        proc_rea = subprocess.run([sys.executable, str(overlay / "opt/thadd/reverse-engineering/rea"),
+                                   "-x", str(asar_path), "--out", str(extracted)],
+                                  capture_output=True, text=True, timeout=180)
+        got = (extracted / "main.js")
+        check("staged rea unpacks a real ASAR byte for byte",
+              proc_rea.returncode == 0 and got.exists() and got.read_bytes() == payload,
+              (proc_rea.stdout + proc_rea.stderr)[-200:])
+        proc_rea_id = subprocess.run([sys.executable, str(overlay / "opt/thadd/reverse-engineering/rea"),
+                                      "--identify", str(asar_path), "--json"],
+                                     capture_output=True, text=True, timeout=120)
+        check("staged rea identifies the container it just unpacked",
+              proc_rea_id.returncode == 0 and "Electron ASAR" in proc_rea_id.stdout,
+              proc_rea_id.stdout[-200:])
 
         produced = REPO / "dist" / "THADD-OS-0.0-test-aurora-amd64.iso"
         check("ISO collected into dist/", produced.is_file(),
@@ -472,11 +503,15 @@ def main() -> int:
           + "-rw-r--r-- root/root 8466 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/SECURITY.md\n"
           + "-rw-r--r-- root/root 6706 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/QUICKSTART.md\n"
           + "-rw-r--r-- root/root 6054 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/AI.md\n"
+          + "-rw-r--r-- root/root 9216 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/FORENSIC_SCAN.md\n"
+          + "-rw-r--r-- root/root 4215 2026-10-14 12:00 squashfs-root/usr/share/doc/thadd/REA.md\n"
           + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd\n"
           + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-toolbox\n"
           + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-ssh\n"
           + "-rwxr-xr-x root/root 1234 2026-10-14 12:00 squashfs-root/usr/local/bin/thadd-passwd\n"
-          + "-rw-r--r-- root/root 1234 2026-10-14 12:00 squashfs-root/usr/share/thadd/packages/optional-security.txt\n")
+          + "-rw-r--r-- root/root 1234 2026-10-14 12:00 squashfs-root/usr/share/thadd/packages/optional-security.txt\n"
+          + "-rwxr-xr-x root/root 24680 2026-10-14 12:00 squashfs-root/usr/local/bin/rea\n"
+          + "-rwxr-xr-x root/root 24680 2026-10-14 12:00 squashfs-root/opt/thadd/reverse-engineering/rea\n")
 
         good_env = dict(env)
         good_env["PATH"] = f"{good_bin}:{good_env['PATH']}"
@@ -512,6 +547,10 @@ def main() -> int:
         check("the documentation inside the image is checked, not assumed",
               "PASS documentation: SECURITY.md" in out,
               [l for l in out.splitlines() if "documentation" in l][:3])
+        check("the forensic method and the reverse-engineering guide ship too",
+              "PASS documentation: FORENSIC_SCAN.md" in out
+              and "PASS documentation: REA.md" in out,
+              [l for l in out.splitlines() if "documentation:" in l])
         check("no shell errors leaked into the verification report",
               "command not found" not in out,
               [l for l in out.splitlines() if "command not found" in l][:2])

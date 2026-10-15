@@ -104,6 +104,7 @@ Every frame is rendered from the same code that draws the shell
 | **Service** | `thadd/server/` | HTTP + WebSocket core, `Registry`/`EventBus`/`Stream`, **105 RPC methods**, REST mirror, real PTYs, snapshots, settings. |
 | **Desktop shell** | `thadd/shell/` | The GUI: menubar, dock, launcher (⌘K), windows, notifications, 38 apps. |
 | **Security** | `thadd/forensics/` | Dependency-free read-only readers for **MBR/GPT, ext4, NTFS ($MFT, ADS, deleted records), HFS+, APFS, FAT/exFAT and Windows registry hives**, plus a triage engine that reverse-engineers an OS from a disk. |
+| **Reverse engineering** | `reverse-engineering/` | `rea` — identify an artefact, read its containers (ZIP/tar/ar/deb/ASAR), pull interesting strings, and write an agent-ready report. Standard library only, online or offline; the method follows morluto/rea. |
 | **AI operator** | `thadd/server/ai/` | Groq-backed agent with ~25 OS tools, approval gates, JSONL audit log, saved conversations — and a fully offline fallback assistant. |
 | **Cloud / RDP** | `cloud/`, `desktop/`, `scripts/` | The other face of THADD OS: a Debian 12 + XFCE workstation in the cloud, reachable from any browser (noVNC) and from any RDP client on port 3389, with the web portal in `cloud/web/`. |
 | **Desktop ISO** | `iso/` | live-build pipeline that turns the repo into a hybrid BIOS+UEFI Debian-live ISO with the XFCE fusion desktop and real browsers/tooling. |

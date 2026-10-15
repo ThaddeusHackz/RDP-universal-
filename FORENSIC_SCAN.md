@@ -62,7 +62,30 @@ print(triage.report_markdown(report))          # human-readable
 print(triage.save_report(report, "./case"))   # JSON + markdown onto disk
 ```
 
-## 3. What a report contains
+## 3. Reverse-engineering an artefact — `rea`
+
+A disk scan answers "what was this machine". The other half of the job is a single
+file: a binary, an installer, a browser extension, a suspicious Electron app.
+`rea` (in `reverse-engineering/`, installed to `/usr/local/bin/rea` by the image)
+does that pass, and the banner has promised it since the first release:
+
+```bash
+rea suspicious.AppImage            # what is it, and what should I do next?
+rea --strings plugin.crx           # URLs, keys, paths, commands it carries
+rea --unpack archive.zip           # recursive: ZIP, tar, ar/deb, gzip/bz2/xz, ASAR
+rea --electron Resources/app.asar  # unpack an Electron app, read package.json + main.js
+rea --report sample.bin            # markdown for an examiner or for the AI operator
+rea --identify sample.bin --json   # the same facts, machine-readable
+```
+
+It is standard library only, so it works on a live ISO with no network and no
+extra packages; the optional helpers (`7z`, `binwalk`, `unsquashfs`, `upx`,
+`monodis`) are used when present and *named* when absent, together with the
+`thadd-toolbox` command that installs them. It reads the artefact and never
+executes it, and it refuses to write outside its output directory — see
+`reverse-engineering/README.md` for the full statement of limits.
+
+## 4. What a report contains
 
 ```
 evidence        sha256, size, device-or-file, chain of custody, report hash
@@ -82,7 +105,7 @@ with write intent. A scan never mounts a filesystem, so it works on evidence tha
 the host itself cannot mount — an APFS container on Linux, an NTFS volume with a
 broken `$MFT`, a disk with a deliberately damaged partition table.
 
-## 4. Regression tests
+## 5. Regression tests
 
 The readers are verified against images with known content, not against
 themselves:
@@ -103,7 +126,7 @@ to say "Unknown" instead of inventing an operating system.
 > cluster read came out of the wrong part of the volume. Fixed in `fat.py`, with
 > the cluster-chain test above as the guard.
 
-## 5. Honesty rules the engine follows
+## 6. Honesty rules the engine follows
 
 1. **No invention.** If the structure is not recognised, it says `unknown` and
    recommends carving — it does not guess a filesystem from a stray signature.
