@@ -25,6 +25,15 @@ on:
       - "iso/**"
       - "cloud/**"
       - "desktop/**"
+      - "ai/**"
+      - "os/**"
+      - "security/**"
+      - "tools/**"
+      - "reverse-engineering/**"
+      - "thadd/**"
+      - "docs/*.md"
+      - "FORENSIC_SCAN.md"
+      - "scripts/ci/**"
       - ".github/workflows/iso-build.yml"
     tags: ["v*"]
 

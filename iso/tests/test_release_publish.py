@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ReleasePublishing(unittest.TestCase):
-    def publish(self, ref):
-        workflow = (ROOT / '.github/workflows/iso-build.yml').read_text()
+    def publish(self, ref, workflow_name='iso-build.yml'):
+        workflow = (ROOT / '.github/workflows' / workflow_name).read_text()
         block = workflow.split('      - name: Publish Release\n', 1)[1].split('        run: |\n', 1)[1]
         script = '\n'.join(line[10:] for line in block.splitlines())
         script = script.replace('${{ github.ref_name }}', ref.removeprefix('refs/tags/').removeprefix('refs/heads/'))
@@ -34,6 +34,25 @@ class ReleasePublishing(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn('Publishing requires a version tag', proc.stdout)
         self.assertEqual(calls, '')
+
+    def test_minimal_branch_publish_is_refused(self):
+        proc, calls = self.publish('refs/heads/arena/test', 'thadd-iso.yml')
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn('Publishing requires a version tag', proc.stdout)
+        self.assertEqual(calls, '')
+
+    def test_minimal_branch_does_not_auto_publish(self):
+        workflow = (ROOT / '.github/workflows/thadd-iso.yml').read_text()
+        publish = workflow.split('      - name: Publish Release', 1)[1]
+        condition = next(line for line in publish.splitlines() if line.strip().startswith('if:'))
+        self.assertNotIn('refs/heads/', condition)
+
+    def test_desktop_rebuilds_for_shipped_sources(self):
+        workflow = (ROOT / '.github/workflows/iso-build.yml').read_text()
+        paths = workflow.split('    paths:', 1)[1].split('    tags:', 1)[0]
+        for source in ('ai', 'os', 'security', 'tools', 'reverse-engineering', 'thadd'):
+            with self.subTest(source=source):
+                self.assertIn(f'"{source}/**"', paths)
 
     def test_tag_uploads_parts_and_both_checksums(self):
         proc, calls = self.publish('refs/tags/v9.9')
