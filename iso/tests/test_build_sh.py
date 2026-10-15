@@ -462,6 +462,17 @@ def main() -> int:
             check("it names the ISO that was actually built",
                   produced.name in text and "sha256sum -c" in text, text[:200])
             check("and it explains how to boot it", "VBoxManage" in text and "thadd rea" in text)
+        # Exercise the split-note heredoc without creating a multi-gigabyte ISO.
+        source = (ISO / "build.sh").read_text()
+        notes_start = source.index('cat > "$DIST_DIR/README.txt"')
+        notes_section = source[notes_start:source.index('\nEOF', notes_start) + 4]
+        rendered = subprocess.run(["bash", "-c", notes_section], env={**os.environ,
+            "DIST_DIR": str(REPO / "dist"), "SIZE_MB": "5625", "ISO_OUT": str(produced),
+            "VERSION": "test", "CODENAME": "aurora"}, capture_output=True, text=True)
+        split_text = body.read_text()
+        check("split instructions expand the actual filename",
+              rendered.returncode == 0 and f"cat {produced.name}.part-* > {produced.name}" in split_text
+              and '$(basename' not in split_text, rendered.stderr + split_text[:500])
         check("the build log was kept", (REPO / "dist" / "build.log").is_file())
         check("verification can be skipped explicitly (THADD_SKIP_VERIFY=1)",
               "THADD_SKIP_VERIFY=1" in proc.stdout, proc.stdout[-300:])

@@ -220,10 +220,16 @@ jobs:
             echo "of the shipped squashfs (identity, desktop profile, session, assistant, scanner, toolchain)."
             echo
             echo '```'
-            sed 's/\x1b\[[0-9;]*m//g' dist/verify.log 2>/dev/null | sed -n '1,220p' || echo "(no verify log)"
+            sed 's/\x1b\[[0-9;]*m//g' dist/verify.log 2>/dev/null  || echo "(no verify log)"
             echo '```'
           } > docs/reports/desktop-iso-verify.md
           sed -n '1,12p' docs/reports/desktop-iso-verify.md
+          # Keep immutable per-run evidence too: an older build can finish last
+          # and overwrite the convenience "latest" report on the same branch.
+          run_report="docs/reports/desktop-iso-verify-${{ github.run_id }}.md"
+          cp docs/reports/desktop-iso-verify.md "$run_report"
+          bash scripts/ci/publish-file.sh "$run_report" \
+            "ci: archive desktop ISO verification ${{ github.run_id }} [skip ci]"
           bash scripts/ci/publish-file.sh docs/reports/desktop-iso-verify.md \
             "ci: desktop ISO verification report [skip ci]" || true
 

@@ -426,7 +426,7 @@ This disc        ${SIZE_MB} MiB · boots on VirtualBox, VMware, QEMU/KVM and bar
 File here        $(basename "$ISO_OUT")
 Verify           sha256sum -c $(basename "$ISO_OUT").sha256
 
-$(if (( SIZE_MB > 1900 )); then cat <<'SPLIT'
+$(if (( SIZE_MB > 1900 )); then cat <<SPLIT
 GitHub caps one release asset at 2 GiB, so this image is uploaded in parts.  Join
 them before booting:
 
