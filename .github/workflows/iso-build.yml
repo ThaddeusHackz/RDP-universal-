@@ -1,0 +1,280 @@
+name: THADD OS Desktop ISO
+
+# Builds the full Debian-live desktop ISO (hybrid BIOS + UEFI, XFCE skinned as a
+# Windows 11 / macOS Sequoia fusion, real browsers and tooling from apt) with
+# live-build, and attaches it to a Release.  This is the heavyweight sibling of
+# thadd-iso.yml, which builds the from-scratch THADD live ISO in pure Python.
+# A superseded push no longer has to finish: this build is an 1-2 hour, 5.6 GB
+# job, and three of them used to run side by side after three pushes, all but the
+# last describing code that no longer exists.  Runs on different refs (a tag, for
+# instance) are still independent, which is what publishing needs.
+concurrency:
+  group: iso-build-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "also create a Release with this build"
+        type: boolean
+        default: false
+  push:
+    branches: [main, "arena/**"]
+    paths:
+      - "iso/**"
+      - "cloud/**"
+      - "desktop/**"
+      - "ai/**"
+      - "os/**"
+      - "security/**"
+      - "tools/**"
+      - "reverse-engineering/**"
+      - "thadd/**"
+      - "docs/*.md"
+      - "FORENSIC_SCAN.md"
+      - "scripts/ci/**"
+      - ".github/workflows/iso-build.yml"
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  live-build:
+    name: Build & verify desktop ISO
+    runs-on: ubuntu-latest
+    # The full toolkit (dev, security, forensics, browsers, firmware) is ~700
+    # extra packages: downloading and unpacking them, then compressing a much
+    # larger squashfs, is where the wall-clock goes.  90 minutes was enough for
+    # the core image only.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: live-build toolchain (Debian 12's own, in a Debian 12 container)
+        run: |
+          # Ubuntu's live-build is a 2015 snapshot that rejects this config, and
+          # THADD OS targets Debian 12 anyway - so the build runs in bookworm.
+          docker pull -q debian:bookworm
+          docker run --rm debian:bookworm bash -c 'apt-get update -qq >/dev/null && apt-get install -y -qq live-build >/dev/null && lb --version' 
+
+      - name: Build THADD OS (desktop profile)
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p dist
+          docker run --rm --privileged \
+            -v "$PWD:/work" -w /work \
+            -e THADD_PROFILE="${THADD_PROFILE:-desktop}" \
+            -e THADD_VERSION="${THADD_VERSION:-}" \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e THADD_SKIP_VERIFY=1 \
+            debian:bookworm bash -c '
+              echo "container: $( . /etc/os-release; echo $PRETTY_NAME ) / debian_version=$(cat /etc/debian_version)"
+              apt-get update -qq && apt-get install -y -qq live-build debootstrap xorriso \
+                squashfs-tools mtools dosfstools rsync isolinux syslinux-common \
+                grub-efi-amd64-bin grub-pc-bin grub-common >/dev/null
+              echo "live-build: $(lb --version | head -1)"; echo "live-build package: $(dpkg-query -W live-build 2>/dev/null)"
+              # The ISO is verified in its own step below, where the chroot has
+              # been deleted and there is room to unpack the squashfs.  Doing it
+              # here would need ~1.6 GB more disk than the runner has spare.
+              echo "in-build verification: ${THADD_SKIP_VERIFY:-0} (1 = the next step verifies instead)"
+              bash -x ./iso/build.sh' 2>&1 | tee dist/desktop-build-trace.log
+        # A failed desktop build must not stop the live ISO from being released
+        # (thadd-iso.yml is what publishes that one).  When this fails, the log
+        # tail below is the fastest way to see why in the Actions UI.
+
+      - name: Build log (on failure) - committed so it is readable from anywhere
+        if: steps.build.outcome == 'failure' || steps.verify.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p docs/reports
+          {
+            echo "# THADD OS desktop ISO - live-build report"
+            echo
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- result: **failed**"
+            echo "- build step: \`${{ steps.build.outcome }}\`  ·  verify step: \`${{ steps.verify.outcome }}\`"
+            echo
+            echo '```'
+            echo "== ls dist =="
+            ls -la dist/ 2>/dev/null || true
+            echo "== ls iso =="
+            ls -la iso/ 2>/dev/null | head -20
+            echo
+            echo "== verification (iso/verify.sh) =="
+            tail -n 80 dist/verify.log 2>/dev/null || echo "(no verify log written)"
+            echo
+            echo "== what the image ended up containing (if it got that far) =="
+            grep -E '^  (PASS|WARN) ' dist/verify.log 2>/dev/null | head -40 || true
+            echo
+            # live-build spreads the effective configuration over five files
+            # (config/common, bootstrap, chroot, binary, source) and each one
+            # holds a different part of it - grep-ing only config/common is what
+            # made an earlier diagnosis guess at the wrong file, so dump them all.
+            for f in iso/config/common iso/config/bootstrap iso/config/chroot iso/config/binary iso/config/source; do
+              echo "== $f =="
+              grep -E '^[A-Za-z_]+=' "$f" 2>/dev/null || echo "(missing)"
+            done
+            echo "== did iso/auto/config run? =="
+            grep -nE 'auto/config|P: Creating config tree|P: Updating config tree' dist/desktop-build-trace.log 2>/dev/null | head -20 || true
+            echo "== what the staged lists ask for =="
+            wc -l iso/config/package-lists/*.list.chroot iso/config/packages/*.txt 2>/dev/null || true
+            grep -nE '^firmware' iso/config/package-lists/*.list.chroot iso/config/packages/*.txt 2>/dev/null || true
+            for f in dist/build.log dist/desktop-build-trace.log iso/*.log /var/log/lb*.log /tmp/lb*.log; do
+              [ -f "$f" ] || continue
+              echo
+              echo "===== $f (first 40 lines) ====="
+              head -n 40 "$f"
+              echo
+              echo "===== $f (last 120 lines) ====="
+              tail -n 120 "$f"
+            done
+            echo
+            echo "===== suites and mirrors the build actually contacted ====="
+            grep -hoE '(https?://[^ ]+ (bookworm|bullseye|trixie|sid|stable|testing)[^ ]*)' dist/build.log 2>/dev/null | sort -u | head -12 || true
+            echo '```'
+          } > docs/reports/desktop-iso-build.md
+          sed -n '1,40p' docs/reports/desktop-iso-build.md
+          # the contents API, not a git push: a CI checkout races every other
+          # push and would silently drop the report
+          bash scripts/ci/publish-file.sh docs/reports/desktop-iso-build.md \
+            "ci: desktop ISO build report [skip ci]"
+          echo "::warning::the live-build desktop ISO failed - see docs/reports/desktop-iso-build.md"
+
+      - name: List what we produced
+        run: |
+          ls -la dist/ || true
+          shopt -s nullglob
+          isos=(dist/*.iso)
+          if (( ${#isos[@]} == 0 )); then
+            echo "::warning::live-build produced no ISO in this run"
+            exit 0
+          fi
+          for f in "${isos[@]}"; do
+            echo "$f  $(stat -c%s "$f") bytes"
+            sha256sum "$f"
+          done
+
+      - name: Verify the ISO
+        id: verify
+        run: |
+          # iso/verify.sh is committed executable; it is called through bash anyway
+          # so a checkout that lost the mode bit verifies instead of silently
+          # skipping (that is how three desktop ISOs shipped unverified: the step
+          # printed "no verify.sh" and passed).
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xorriso squashfs-tools file >/dev/null
+          # The build tree is not part of the artefact and the verifier needs the
+          # space to unpack the squashfs: drop the chroot/binary/cache first.
+          sudo rm -rf iso/cache iso/chroot iso/binary iso/.build iso/config/includes.chroot 2>/dev/null || true
+          df -h / | tail -1
+          # the verifier unpacks the squashfs; put that on the roomier ephemeral
+          # disk when the runner has one
+          if [ -d /mnt ] && [ -w /mnt ]; then
+            sudo mkdir -p /mnt/thadd-verify && sudo chmod 777 /mnt/thadd-verify
+            export THADD_VERIFY_WORK=/mnt/thadd-verify
+          fi
+          df -h "${THADD_VERIFY_WORK:-/tmp}" | tail -1
+          # NOT a pipeline: GitHub's default run shell is `bash -e` without
+          # pipefail, so `verify.sh | tee` returned tee's status and a verifier
+          # that printed "RESULT: NOT SHIPPABLE" still passed the step.  Capture
+          # the status explicitly, and require the verdict line as well - two
+          # independent guards so a broken ISO cannot pass by accident again.
+          set +e
+          sudo bash ./iso/verify.sh > dist/verify.log 2>&1
+          verify_rc=$?
+          set -e
+          sed 's/\x1b\[[0-9;]*m//g' dist/verify.log
+          if [ "$verify_rc" -ne 0 ]; then
+            echo "::error::iso/verify.sh refused the ISO (exit $verify_rc)"
+            exit "$verify_rc"
+          fi
+          grep -q "RESULT: SHIPPABLE" dist/verify.log || {
+            echo "::error::the verifier exited 0 but never said RESULT: SHIPPABLE"
+            exit 1
+          }
+
+      - name: Keep the verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: THADD-OS-desktop-verify-log
+          path: dist/verify.log
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Verification report (committed) - the proof travels with the repo
+        if: always() && steps.verify.outcome != 'skipped' && steps.verify.outcome != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Artifacts expire and job logs are awkward to read; this report is a
+          # commit, so "was this image actually verified?" stays answerable from
+          # the repository itself, for every run that reaches verification.
+          mkdir -p docs/reports
+          {
+            echo "# THADD OS desktop ISO - verification report"
+            echo
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- verify step: **${{ steps.verify.outcome }}**"
+            echo "- full log: artifact \`THADD-OS-desktop-verify-log\` (30 days) and \`dist/verify.log\`"
+            echo
+            echo "\`iso/verify.sh\` read the built ISO back: boot records, ISO layout, and the contents"
+            echo "of the shipped squashfs (identity, desktop profile, session, assistant, scanner, toolchain)."
+            echo
+            echo '```'
+            sed 's/\x1b\[[0-9;]*m//g' dist/verify.log 2>/dev/null  || echo "(no verify log)"
+            echo '```'
+          } > docs/reports/desktop-iso-verify.md
+          sed -n '1,12p' docs/reports/desktop-iso-verify.md
+          # Keep immutable per-run evidence too: an older build can finish last
+          # and overwrite the convenience "latest" report on the same branch.
+          run_report="docs/reports/desktop-iso-verify-${{ github.run_id }}.md"
+          cp docs/reports/desktop-iso-verify.md "$run_report"
+          bash scripts/ci/publish-file.sh "$run_report" \
+            "ci: archive desktop ISO verification ${{ github.run_id }} [skip ci]"
+          bash scripts/ci/publish-file.sh docs/reports/desktop-iso-verify.md \
+            "ci: desktop ISO verification report [skip ci]" || true
+
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('dist/*.iso') != ''
+        with:
+          name: THADD-OS-desktop-ISO
+          path: dist/*.iso
+          retention-days: 30
+
+      - name: Publish Release
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish) && hashFiles('dist/*.iso') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Never map a branch build onto an existing release implicitly.
+          if [[ "${{ github.ref }}" != refs/tags/v* ]]; then
+            echo "::error::Publishing requires a version tag (refs/tags/v*); select a tag when dispatching."
+            exit 1
+          fi
+          NOTES="dist/README.txt"
+          [ -f "$NOTES" ] || printf 'THADD OS desktop live ISO (hybrid BIOS + UEFI).\n' > "$NOTES"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "THADD OS ${TAG#v}" --notes-file "$NOTES"
+          # GitHub caps one release asset at 2 GiB: a desktop ISO with the full
+          # browser/dev/security stack can cross that, and iso/build.sh already
+          # split it into 1900 MiB parts when it did.
+          shopt -s nullglob
+          parts=(dist/*.part-*)
+          if (( ${#parts[@]} > 0 )); then
+            echo "uploading ${#parts[@]} parts (the ISO is over the 2 GiB asset limit)"
+            gh release upload "$TAG" "${parts[@]}" dist/parts.sha256 --clobber
+          else
+            gh release upload "$TAG" dist/*.iso --clobber
+          fi
+          # Include the joined ISO checksum as well as per-part checksums.
+          gh release upload "$TAG" dist/*.iso.sha256 dist/RELEASE-NOTES.md --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'

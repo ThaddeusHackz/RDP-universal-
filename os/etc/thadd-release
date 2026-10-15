@@ -1,0 +1,6 @@
+THADD OS 2026.10 (aurora)
+Base     : Debian 12 "bookworm" - live/hybrid BIOS+UEFI
+Desktop  : THADD Hybrid Shell - Windows 11 geometry x macOS Sequoia material
+Assist   : THADD AI (Groq + any OpenAI-compatible provider)
+Offensive: THADD Security Suite + Parrot/Kali Toolbox
+Reverse  : REA (rea-agents) - binaries, Electron, .NET, websites

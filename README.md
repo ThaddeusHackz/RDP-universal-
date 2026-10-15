@@ -1,218 +1,228 @@
 <p align="center">
-  <img src="web/logo.png" alt="THADD OS" width="128" />
+  <img src="cloud/web/logo.png" alt="THADD OS" width="132" />
 </p>
 
 <h1 align="center">THADD OS</h1>
-<p align="center"><em>One OS. All the Best. — a universal Linux desktop that lives in the cloud.</em></p>
+
+<p align="center"><strong>One OS. All the Best.</strong><br/>
+<em>A complete operating system — a bootable live ISO, a browser desktop, an RDP/cloud
+workstation, a security lab, an AI operator and a forensics workbench — in one repository.</em></p>
 
 <p align="center">
-  <a href="https://github.com/ThaddeusHackz/RDP-universal-/actions/workflows/thadd-os-ci.yml"><img alt="THADD OS CI" src="https://github.com/ThaddeusHackz/RDP-universal-/actions/workflows/thadd-os-ci.yml/badge.svg"></a>
-  <img alt="Base" src="https://img.shields.io/badge/base-Debian%2012-d70a53">
-  <img alt="Desktop" src="https://img.shields.io/badge/desktop-XFCE%204.18-0e8ac3">
-  <img alt="Access" src="https://img.shields.io/badge/access-browser%20%2B%20RDP-34d399">
-  <img alt="RAM" src="https://img.shields.io/badge/idle%20RAM-~300%20MB-9b59b6">
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-iso.yml"><img alt="THADD OS ISO" src="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-iso.yml/badge.svg"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-os-ci.yml"><img alt="THADD OS CI" src="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/actions/workflows/thadd-os-ci.yml/badge.svg"></a>
+  <a href="https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases"><img alt="Download the ISO" src="https://img.shields.io/badge/download-.iso%20releases-3b82f6"></a>
+  <img alt="Boot" src="https://img.shields.io/badge/boot-UEFI%20%2B%20BIOS%20%2F%20CSM-0ea5e9">
+  <img alt="Base" src="https://img.shields.io/badge/base-Debian%2012%20%2B%20own%20userland-d70a53">
+  <img alt="Desktop" src="https://img.shields.io/badge/desktop-Windows%2011%20%C3%97%20macOS%20Sequoia-8b5cf6">
+  <img alt="Methods" src="https://img.shields.io/badge/RPC%20methods-105-22c55e">
 </p>
 
 ---
 
-**THADD OS** is a complete, lightweight Linux operating system that runs **forever in the cloud** and is reachable from **anywhere**:
+## ⬇️ Get THADD OS
 
-- 🌐 **In any web browser** — a branded portal with an instant, zero-install desktop (noVNC).
-- 🖥️ **From any RDP client** — including **Microsoft's own Remote Desktop** (mstsc) on Windows, via a real RDP server (xrdp) on port **3389**, just like a VPS: **IP → username → password**.
-- 🪶 **Lightweight like Debian** — Debian 12 base + XFCE: idles around 300 MB of RAM and still runs a full browser session without disappointing.
-- 🔁 **Self-healing and forever-on** — healthchecks, auto-restart policies and a persistent Railway volume.
-- 🕵️ **CI-verified on every push** — the CI pipeline below *builds the OS, logs into it over real RDP, and photographs the running desktop* before it ships.
+| Disc | What it is | Built by |
+| --- | --- | --- |
+| **`THADD-OS-1.0-x86_64.iso`** (78 MB) | The THADD live system: own boot chain, own userland, the THADD service (105 RPC methods), forensic engine, AI operator and the desktop shell. UEFI. | `thadd/boot/*` — pure Python, no xorriso/mtools/live-build |
+| **`THADD-OS-<version>-aurora-amd64.iso`** (~5.6 GB) | The full Debian-live desktop: XFCE skinned as a Windows 11 × macOS Sequoia fusion; **Firefox ESR, Chromium, Chrome, Edge, Brave, Epiphany, qutebrowser, Falkon, Tor Browser, w3m, lynx**; the dev toolchain (gcc, git, node/npm, Python, **VS Code**, **PowerShell 7**); the Parrot/HTB-class security and forensics sets (**Metasploit, nmap, sqlmap, hydra, aircrack-ng, hashcat, John, bettercap, mitmproxy, impacket, wireshark, sleuthkit, binwalk**, …); plus the in-OS AI assistant and forensic scanner. **Hybrid BIOS + UEFI.** | `iso/build.sh` — live-build |
 
-It is designed to impress: the first thing you see is a polished, curated desktop — XFCE 4.18 dressed in Arc-Dark, Papirus-Dark icons, Inter typography, a macOS-style Plank dock, a live conky HUD, a Dracula terminal and a starship prompt — branded **THADD OS** down to the kernel's `os-release`.
+Both are attached to every [**Release**](https://github.com/ThaddeusHackz/THADD-OS---THE-REVERSE-ENGINEERED-OS-/releases)
+by CI, which builds them from source on every run. The desktop image is larger than GitHub's 2 GiB
+per-asset limit, so it ships as `*.part-00`, `*.part-01`, … plus a `parts.sha256` — rejoin it with:
+
+```bash
+cat THADD-OS-*-aurora-amd64.iso.part-* > thadd-os.iso
+sha256sum -c parts.sha256
+```
+
+**Use `v1.4` or newer.** Earlier releases were published while `iso/verify.sh` was broken — the file
+had lost its executable bit, CI skipped it, and the one run that did reach it had its verdict thrown
+away by a `tee` pipeline. They are marked as pre-releases and say so on the release page.
+
+### Boot it in VirtualBox
+
+1. **New VM** → Type *Linux*, Version *Other Linux (64-bit)*, RAM **2 GB+**, disk: none needed (live).
+2. **Settings → System → Motherboard → ✅ Enable EFI** — the from-scratch ISO is UEFI-only.
+   *(The desktop ISO also boots on legacy BIOS/CSM, so you can leave EFI on either way.)*
+3. **Settings → Storage** → attach the `.iso` to the optical drive.
+4. Start. The THADD loader prints every step to the firmware console, then hands over to Linux.
+5. Optional but recommended: **Settings → Network → Adapter 1 → Advanced → Port Forwarding**,
+   add host `8080` → guest `8080`. The full GUI shell is then on **your** browser at
+   <http://127.0.0.1:8080>.
+
+Nothing on the discs writes to your disks unless you ask it to.
 
 ---
 
-## 📸 Proof it works
+## 🎬 THADD OS in motion
 
-> ⚠️ **One-time step:** this repo's CI suite ships at [`ci/thadd-os-ci.yml.example`](ci/thadd-os-ci.yml.example) because GitHub requires a *workflows* write permission that some GitHub connections don't grant. Enable it in ~20 seconds with the [`ci/ENABLE-CI.md`](ci/ENABLE-CI.md) guide, and from then on every push is verified end-to-end.
+<video src="docs/media/thadd-os-demo.mp4" controls muted playsinline width="100%"></video>
 
-Every push to this repo triggers a full end-to-end test that **logs into the running OS over a real RDP connection** and commits a screenshot of the live desktop back to the repo:
+▶ **[`docs/media/thadd-os-demo.mp4`](docs/media/thadd-os-demo.mp4)** — 1280×720 H.264, 49 s, 1.2 MB,
+31 scenes: boot splash → lock screen → desktop → launcher → AI operator → terminal →
+PowerShell → files → editor → security centre → forensic lab → task manager → settings →
+app store → snapshots → recorder → media → multi-window → VMs → productivity suite.
 
-<p align="center"><img src="ci/thadd-os-screenshot.jpg" alt="THADD OS desktop, captured over RDP during CI" width="640"></p>
+Every frame is rendered from the same code that draws the shell
+(`thadd/server/video.py`), so the video, the gallery below and the ISO stay in sync:
+`python3 -c "from thadd.server import video; video.render_demo()"`.
 
-> The screenshot is machine-captured by the CI workflow. A previous 2 KB black frame was a false green (FreeRDP stayed alive without logging in); CI now requires a sesman `login successful` line and rejects near-empty JPEGs.
+### Live desktop gallery — 31 snapshots
 
----
+|  |  |  |
+| --- | --- | --- |
+| ![boot](docs/snapshots/01-boot-splash.png) | ![services](docs/snapshots/02-boot-services.png) | ![lock](docs/snapshots/03-lock-screen.png) |
+| ![desktop](docs/snapshots/04-desktop.png) | ![launcher](docs/snapshots/05-launcher.png) | ![ai search](docs/snapshots/06-launcher-ai-search.png) |
+| ![control centre](docs/snapshots/07-control-center.png) | ![notifications](docs/snapshots/08-notification-center.png) | ![ai chat](docs/snapshots/09-ai-agent-chat.png) |
+| ![ai done](docs/snapshots/10-ai-agent-complete.png) | ![terminal](docs/snapshots/11-terminal-neofetch.png) | ![powershell](docs/snapshots/12-powershell.png) |
+| ![files](docs/snapshots/13-files.png) | ![editor](docs/snapshots/14-code-editor.png) | ![security](docs/snapshots/15-security-center.png) |
+| ![scan](docs/snapshots/16-security-scan-live.png) | ![forensics](docs/snapshots/17-forensics-lab.png) | ![dfir](docs/snapshots/18-dfir-cross-os.png) |
+| ![taskmgr](docs/snapshots/19-task-manager.png) | ![monitor](docs/snapshots/20-system-monitor.png) | ![appearance](docs/snapshots/21-settings-appearance.png) |
+| ![ai settings](docs/snapshots/22-settings-ai.png) | ![store](docs/snapshots/23-app-store.png) | ![installing](docs/snapshots/24-app-store-installing.png) |
+| ![snapshots](docs/snapshots/25-snapshots.png) | ![recorder](docs/snapshots/26-screen-recorder.png) | ![media](docs/snapshots/27-media-player.png) |
+| ![multi window](docs/snapshots/28-multi-window.png) | ![vms](docs/snapshots/29-vms-windows-macos.png) | ![productivity](docs/snapshots/30-productivity-suite.png) |
 
-## 🚀 Deploy on Railway (≈5 minutes)
-
-### Step 1 — Create the service
-
-1. Go to [railway.com](https://railway.com) → **New Project** → **Deploy from GitHub repo**.
-2. Select this repository (`ThaddeusHackz/RDP-universal-`). Railway auto-detects the `Dockerfile` (`railway.json` pins it explicitly).
-3. Railway builds the image (2–4 min) and starts THADD OS.
-
-Or with the CLI:
-
-```bash
-railway init
-railway up
-```
-
-### Step 2 — Set your password (recommended)
-
-In the service → **Variables**, set:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `THADD_USER` | `thadd` | Login username (RDP + browser) |
-| `THADD_PASSWORD` | `thadd` | Login password (RDP + browser) |
-| `THADD_ROOT_PASSWORD` | *(empty)* | Optional root password |
-| `RESOLUTION` | `1600x900` | Desktop resolution |
-| `SWAP_MB` | `512` | Optional swap file (self-managed, best-effort) |
-
-```bash
-railway variables set THADD_PASSWORD='your-strong-password'
-```
-
-> ⚠️ If you keep the default password on a public domain, assume it is public. Change it.
-
-### Step 3 — Make it last forever (persistence)
-
-1. Service → **Volumes** → **Add Volume**.
-2. Mount it at **`/home/thadd`**.
-
-Your entire desktop profile, files and settings now survive redeploys and restarts. On first boot of a fresh volume, THADD OS automatically seeds the themed desktop into it. Combined with the `ON_FAILURE` restart policy and healthchecks (`/healthz`), the OS effectively **runs forever**.
-
-### Step 4 — Access it
-
-| Path | How |
-|---|---|
-| **Browser** | Open the service's public domain (e.g. `https://thadd-os-production-xxxx.up.railway.app`) → **Open Desktop in Browser**. You are signed in automatically. |
-| **Windows Remote Desktop** | Service → **Settings → Networking → TCP Proxy** → add a proxy for application port **3389**. Railway gives you a public `host:port` (e.g. `roundhouse.proxy.rlwy.net:11105`). Open **mstsc**, type the host, port, username and password. |
-| **Any RDP client** | Remmina / FreeRDP / Jump Desktop / Parallels Client — same host, port `3389`, username + password. |
-| **CLI (TCP proxy)** | `railway tcp-proxy create --port 3389` |
-
-> Note: the TCP proxy requires a paid Railway plan (Hobby and above). The browser access works on any plan.
-
-Inside the OS, `RAILWAY_TCP_PROXY_DOMAIN` / `RAILWAY_TCP_PROXY_PORT` are exposed automatically, and the boot log prints your exact connection string.
+…and `docs/snapshots/31-endcard.png` closes the set. All 31 files are in
+[`docs/snapshots/`](docs/snapshots) at 1600×900, PNG.
 
 ---
 
-## 🔐 Default credentials
+## 🧠 What is inside
 
-| Field | Value |
-|---|---|
-| Username | `thadd` |
-| Password | `thadd` (change via `THADD_PASSWORD`!) |
-| Sudo | passwordless (`sudo`) |
-| RDP port | `3389` |
-| Web port | Railway's `PORT` |
+```
+                 ┌────────────────────────────── THADD OS ──────────────────────────────┐
+  firmware ──▶   │  UEFI loader   →  Linux kernel  →  live userland  →  the OS services  │
+                 │  \EFI\BOOT\      \boot\vmlinuz    own initramfs      thadd server     │
+                 │  BOOTX64.EFI     \boot\initrd.img  (PID 1: /init)   desktop shell    │
+                 └──────────────────────────────────────────────────────────────────────┘
+```
+
+| Layer | Where | What it does |
+| --- | --- | --- |
+| **Boot & ISO** | `thadd/boot/` | Freestanding PE32+ UEFI loader, FAT16 writer, newc cpio writer, rootfs stager, ISO 9660 + El Torito assembler. Pure Python + gcc. |
+| **Service** | `thadd/server/` | HTTP + WebSocket core, `Registry`/`EventBus`/`Stream`, **105 RPC methods**, REST mirror, real PTYs, snapshots, settings. |
+| **Desktop shell** | `thadd/shell/` | The GUI: menubar, dock, launcher (⌘K), windows, notifications, 38 apps. |
+| **Security** | `thadd/forensics/` | Dependency-free read-only readers for **MBR/GPT, ext4, NTFS ($MFT, ADS, deleted records), HFS+, APFS, FAT/exFAT and Windows registry hives**, plus a triage engine that reverse-engineers an OS from a disk. |
+| **Reverse engineering** | `reverse-engineering/` | `rea` — identify an artefact, read its containers (ZIP/tar/ar/deb/ASAR), pull interesting strings, and write an agent-ready report. Standard library only, online or offline; the method follows morluto/rea. |
+| **AI operator** | `thadd/server/ai/` | Groq-backed agent with ~25 OS tools, approval gates, JSONL audit log, saved conversations — and a fully offline fallback assistant. |
+| **Cloud / RDP** | `cloud/`, `desktop/`, `scripts/` | The other face of THADD OS: a Debian 12 + XFCE workstation in the cloud, reachable from any browser (noVNC) and from any RDP client on port 3389, with the web portal in `cloud/web/`. |
+| **Desktop ISO** | `iso/` | live-build pipeline that turns the repo into a hybrid BIOS+UEFI Debian-live ISO with the XFCE fusion desktop and real browsers/tooling. |
+
+**Terminals** bash · zsh · fish · PowerShell (`pwsh`) · python · node · sqlite
+**Toolchain** gcc/g++, make, git, python3 + pip, node + npm, nano/vim, tar/xz/zip, openssl, curl
+**In the live system** `thadd` (control centre: `thadd doctor`, `thadd security`, `thadd status`, `thadd dfir /dev/sdX`), `thadd-ai` (assistant), `thadd-toolbox` (optional tool sets on demand), `thadd-ssh`, shells on `tty1`/`tty2` and the serial line
+**Hidden gems** macOS-style ⌘K spotlight with AI search, Windows-style task manager and notification centre,
+Linux power tools, `Ctrl+Alt+F2` break-glass shell, `sysrq` recovery, live forensic triage of any disk.
 
 ---
 
-## 🩺 If login ever fails
+## 🔍 Verified before shipping
 
-THADD OS now proves its own login path from *inside the running instance*,
-every minute. Before concluding anything is broken — or after a redeploy —
-check the three live endpoints:
+The repository does not trust the ISOs — it proves them, on every push:
 
-```bash
-B=https://<your-public-domain>
-curl -fsS $B/api/login-probe    # ready:true ⇒ this instance accepts the creds right now
-curl -fsS $B/api/login-status   # boot-time audit of PAM / xrdp.ini / shadow / VNC
-curl -fsS $B/api/creds          # live credentials + the image BUILD timestamp
-```
+| Check | Where |
+| --- | --- |
+| The loader runs against **two mock firmwares** and every handover check passes (protocol 2.15, `boot_params` ramdisk fields, `rdinit=/init`): one with a filesystem, one that exposes **only raw blocks** — in which case the loader parses ISO 9660 itself and pulls the kernel and initramfs off the disc **byte-identically** | `thadd/boot/tests/run_loader_test.py` |
+| The staged userland **actually runs**: Python 3.11 in a chroot imports, Pillow renders text with DejaVu fonts | `thadd/boot/stage_rootfs.py` + `chroot` |
+| The THADD service **boots inside that guest userland** — `/healthz`, `system.info`, 105 methods registered | `python3 -m thadd.server` |
+| Every file extracted from the finished ISO is **hash-identical** to its source; the El Torito entry is spec-correct (platform `0xEF`, no-emulation, 4,152 sectors) | `thadd-iso.yml` → *Verify the disc* |
+| The cloud OS is **logged into over a real RDP connection** and photographed | `thadd-os-ci.yml` |
+| The forensic readers are fed images with known content — a nested directory, a multi-cluster file, a deleted entry, an MBR, a GPT — and must return the exact bytes, and 3 KB of random data and must answer "Unknown" | `thadd/forensics/tests/test_triage.py` |
+| The gallery and the demo video still render on a clean machine — at the full design size **and** down-scaled, so no scene can overflow its own window | `thadd-tests.yml` |
+| The desktop-ISO **build driver** runs against a stub live-build: the configuration in `iso/auto/config` is proven to reach `lb config`, and a wrong suite, a main-only archive area or a lost bootloader set is refused in seconds instead of after 45 minutes | `iso/tests/test_build_sh.py` |
+| The **finished desktop ISO is read back**: ISO 9660 + hybrid MBR + El Torito (BIOS **and** EFI) boot records, the ISO layout file by file, the squashfs inventory, and the contents the OS promises — THADD identity, the XFCE/`picom`/LightDM stack, `thadd-shell-session`, the AI agent loop and its tool registry, the DFIR engine, `thadd-scan`, browsers, the security toolchain, and the verdict of the image's **own** self-test. `0 failure(s)` or the build is not published | `iso/verify.sh` → `docs/reports/desktop-iso-verify.md` |
+| The image **tests itself from the inside** during the build (every check passing in the current release — read `/etc/thadd/selfcheck.txt` for the number) and that verdict is read back out of the shipped squashfs | `desktop/thadd-desktop-selftest` → `/etc/thadd/selfcheck.txt` |
+| The **optional package sets** report what they did, and the verification fails if fewer than four of the seven ran — the tolerant installer writes its report into the image precisely so "did the security/dev/forensics/browser tooling actually install?" is answerable, and packages Debian does not ship (Metasploit and PowerShell come from Rapid7's and Microsoft's own repositories; radare2 is not packaged for Debian 12) are named instead of quietly missing | `tools/bin/thadd-apt-safe`, `iso/config/hooks/normal/0450-thadd-thirdparty-tools.hook.chroot` |
+| The verifier is tested in **both directions**: a broken ISO must be refused (and `build.sh` must die rather than publish it), and a healthy synthetic ISO must come back `RESULT: SHIPPABLE` | `iso/tests/test_build_sh.py` (56 checks) |
 
-- `login-probe.ready` **false** → the `reasons` array says *exactly* why
-  (locked account, broken PAM, missing TLS cert, …). Inside the OS:
-  `thadd doctor`.
-- Credentials still refused but the probe says ready → compare the `build`
-  stamp with the repo's latest commit date. An **older build** means Railway
-  never redeployed the fix: redeploy/restart the service.
-- Native RDP on Railway **requires a TCP proxy for port 3389** (Settings →
-  Networking → TCP Proxy). Connecting mstsc at the *web* domain cannot work.
-- Expect one **self-signed certificate warning** (TLS, generated at boot) —
-  accept it. And note xrdp's login screen uses a US keyboard layout: if your
-  password contains symbols and your client uses another layout, prefer the
-  browser desktop or a letters+digits password.
+![THADD OS desktop, captured over a real RDP session inside CI](ci/thadd-os-screenshot.jpg)
+
+*Not a mock-up: this is the running THADD OS desktop, screenshotted over an RDP login inside the CI
+runner and pushed back into the repository by `thadd-os-ci.yml` on every boot test.*
+
+The kernel and initramfs are kept on the ISO 9660 volume rather than in the El Torito boot image,
+because that image's size is a 16-bit field in the boot catalog (32 MB ceiling). To make that safe on
+firmwares that do **not** mount a CD's ISO 9660 volume, the loader reads the disc's blocks directly
+with its own ISO 9660 parser — fallback order: any SimpleFileSystem volume first, then raw blocks.
+Firmware 2 above is that exact scenario, tested on a real ISO built by the same code as the shipped one.
+
+**Honest limits.** No hypervisor exists on the build host, so neither ISO has been *booted* here:
+the from-scratch loader is proven against two mock firmwares (the handover contract, byte-identical
+kernel/initramfs reads), and the desktop ISO is proven structurally — boot records, ISO layout,
+squashfs contents, kernel and initramfs — plus by the image's own self-test running inside its
+chroot during the build. Nothing in this repository claims an observed VirtualBox boot. The
+Debian-live desktop ISO carries the heavyweight stack (browsers, the security and dev sets, office,
+IDEs) because it installs them from apt during its build; that is also why it is ~5.6 GB and shipped
+in three parts. Packages that have vanished from a Debian
+release are logged and skipped by `thadd-apt-safe` rather than failing the build — the verification
+report lists exactly which ones, and it is why the installer's own report is shipped inside the
+image: PowerShell and Metasploit come from Microsoft's and Rapid7's repositories, Chrome, Edge,
+Brave and VS Code from their vendors', and radare2 simply is not packaged for Debian 12 (it and
+Opera, Vivaldi, Slack, Discord, Zoom and Spotify are named in the report as not installed rather
+than quietly missing).
 
 ---
 
-## ✨ What's inside
-
-**The "best of all Linux" lineup** — see [`docs/BEST_OF_LINUX.md`](docs/BEST_OF_LINUX.md) for the full lineage:
-
-| Heritage | What THADD OS takes |
-|---|---|
-| **Debian** | The base: stability, apt, and lightness — the foundation |
-| **Ubuntu / Xubuntu** | Usability DNA: XFCE desktop, batteries-included experience |
-| **elementary OS** | The Plank dock and the "less but better" aesthetic |
-| **Arch** | The minimalism philosophy and ricing culture: starship, btop, neofetch |
-| **Fedora** | Modern desktop standards: latest XFCE, PipeWire-era plumbing via Debian |
-| **r/unixporn** | Arc-Dark + Papirus-Dark + Dracula terminal + conky HUD |
-
-**The stack**
-
-- **Base:** Debian 12 (bookworm-slim)
-- **Desktop:** XFCE 4.18 + whisker menu + Arc-Dark + Papirus-Dark + Inter + JetBrains Mono
-- **RDP:** xrdp (Microsoft Remote Desktop compatible, TLS — not NLA; Debian xrdp cannot finish CredSSP)
-- **Browser desktop:** TigerVNC (Xvnc) + websockify + noVNC, persistent always-on session, one-click auto-login
-- **Edge:** nginx portal with `/healthz`, `/api/creds`, `/api/login-status`, WebSocket bridge
-- **Orchestration:** supervisord — every service auto-restarts forever
-- **Apps:** Firefox ESR, Thunar, Mousepad, Ristretto, btop, neofetch, htop, git, sudo, bat, duf…
-- **Extras:** custom `thadd` CLI, `thadd doctor` diagnostics, first-boot welcome terminal, custom MOTD, THADD-branded `os-release` (so `neofetch` says **THADD OS**)
-
-## 🩺 Using the OS
+## 🛠 Build it yourself
 
 ```bash
-thadd            # system overview with the THADD banner
-thadd doctor     # full self-diagnostic of every service
-thadd welcome    # welcome banner
-neofetch         # system info with the THADD logo
-btop             # gorgeous live resource monitor
+# the from-scratch ISO (pure Python + gcc, no root, ~1 minute)
+python3 thadd/boot/build_bootloaders.py                              # -> build/boot/BOOTX64.EFI
+python3 thadd/boot/tests/run_loader_test.py                          # mock-firmware test
+python3 thadd/boot/stage_rootfs.py build/live/rootfs                 # ~96 MB userland
+python3 thadd/boot/mkinitramfs.py build/live/rootfs build/iso/boot/initrd.img.gz
+python3 -m thadd.boot.assemble_iso                                   # -> build/iso/THADD-OS-1.0-x86_64.iso
+
+# run the service + shell on this machine
+python3 -m thadd.server --host 0.0.0.0 --port 8080 --shell thadd/shell
+
+# the Debian-live desktop ISO (needs live-build/xorriso, ~20 min)
+sudo apt-get install live-build debootstrap xorriso squashfs-tools mtools dosfstools rsync
+sudo python3 iso/tests/test_build_sh.py                              # prove the driver first (~1 s)
+sudo ./iso/build.sh                                                  # -> dist/THADD-OS-*.iso
+
+# the media in this README
+python3 -c "from thadd.server import video; video.render_demo()"     # gallery + MP4
+python3 thadd/server/tests/test_render.py                            # ...and prove it renders
 ```
 
-## 🧪 How it is tested
+CI runs all of it on every push: [`thadd-iso.yml`](.github/workflows/thadd-iso.yml) builds and
+publishes the live ISO, [`iso-build.yml`](.github/workflows/iso-build.yml) builds the desktop ISO,
+[`thadd-os-ci.yml`](.github/workflows/thadd-os-ci.yml) boots the cloud OS and logs into it over RDP.
 
-```mermaid
-flowchart LR
-    P[git push] --> B[Docker build<br/>identical to Railway]
-    B --> R[docker run<br/>full OS boot]
-    R --> H[HTTP portal + healthz]
-    H --> L[PAM login-path proof]
-    L --> W[WebSocket → live Xvnc desktop]
-    W --> N[Raw RDP protocol negotiation]
-    N --> F[FreeRDP login + sesman success]
-    F --> S[Desktop session audit<br/>XFCE · Plank · xrdp]
-    S --> C[Screenshot committed<br/>as proof]
-```
-
-Run the same suite anywhere with Docker:
-
-```bash
-docker build -t thadd-os .
-docker run -d --name thadd -p 8080:8080 -p 3389:3389 \
-  -e PORT=8080 -e THADD_PASSWORD='Test123!' -e RESOLUTION=1280x800 thadd-os
-# portal: http://localhost:8080   ·   RDP: localhost:3389
-```
+---
 
 ## 📚 Documentation
 
-- [`docs/BEST_OF_LINUX.md`](docs/BEST_OF_LINUX.md) — the design manifesto: which distro contributed what
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — ports, services, sessions, security and performance tuning
-- [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md) — why RDP credentials failed, and every fix
-- [`FORENSIC_SCAN.md`](FORENSIC_SCAN.md) — the forensic audit of the legacy repository
-- [`docs/FORENSIC_SCAN_CURRENT.md`](docs/FORENSIC_SCAN_CURRENT.md) — the latest full-tree rescan
-- [`scripts/forensic-scan.sh`](scripts/forensic-scan.sh) — the reusable forensic scanner (includes the RDP login-path audit)
+Three guides ship inside the image (`/usr/share/doc/thadd/`) and live in `docs/`:
 
-## ❓ FAQ
+| Guide | For |
+| --- | --- |
+| [`docs/QUICKSTART.md`](docs/QUICKSTART.md) | booting it in VirtualBox, logging in, the keyboard map, what is installed, what to do when a screen stays black |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | every control the image applies — sysctl, AppArmor, auditd, ufw, sshd-off, sudo logging, password quality — and how to inspect or undo each one |
+| [`docs/AI.md`](docs/AI.md) | the in-OS assistant: Groq/OpenAI-compatible/offline modes, the 35 tools, the approval gate and the audit log |
 
-**Does it really run forever?** Railway keeps the container running 24/7 (it never sleeps), healthchecks detect faults, `restartPolicyType: ON_FAILURE` + supervisord restart any component that dies, and your data lives on a volume that outlives every container.
+## 📂 Repository map
 
-**How heavy is it?** Idle ≈ 300 MB RAM. Firefox browsing ≈ 600–800 MB. A Railway 1 GB plan is plenty; 512 MB works for light use. Tuning knobs in `docs/ARCHITECTURE.md`.
+```
+thadd/            the OS itself: boot/ (loader + ISO builders), server/ (105 methods, AI),
+                  shell/ (desktop), forensics/ (disk readers + triage)
+iso/              live-build pipeline for the Debian-live desktop ISO
+cloud/            the cloud/RDP deployment: xrdp, XFCE skin, noVNC portal, Railway config
+desktop/          the browser desktop shell used by the cloud portal
+tools/            helper scripts, test suites, welcome screens
+scripts/ci/       CI helpers (wait-health, RDP login, screenshot publishing)
+docs/snapshots/   the 31 desktop snapshots above
+docs/media/       the demo video
+FORENSIC_SCAN.md  the forensic method, the CLI, the readers and the tests
+                  (method reference: morluto/rea)
+```
 
-**Can I really use Windows' own Remote Desktop app?** Yes — mstsc connects to the TCP-proxy host:port with the username/password. Accept the self-signed certificate warning (the cert is generated at boot). The CI pipeline proves this exact path with FreeRDP **and** a PAM `pamtester` check against `xrdp-sesman` on every push.
+## License & credits
 
-**I type the username and password and login fails. Why?** Three things used to cause this even with the correct password; all three are now fixed. (1) Debian's `xrdp-sesman` PAM stack marks `pam_loginuid` as `required`, which always fails inside Docker/Railway. (2) The default xrdp session was Xorg, but `xorgxrdp` is not installed. (3) The browser desktop is VNC — it never asks for a username; the portal now auto-signs you in. Run `thadd doctor` inside the OS if anything still looks off. See [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md).
-
-**Is the connection secure?** RDP runs xrdp with TLS (`security_layer=tls`, `crypt_level=high`). We deliberately do **not** advertise NLA/CredSSP — Debian's xrdp cannot complete a HYBRID handshake, so `negotiate` made Windows clients fail after the password was accepted. The browser path is HTTPS on Railway's edge and the VNC socket is localhost-only inside the container, bridged through a password-authenticated RFB session. The password is yours to strengthen via variables.
-
----
-
-<p align="center">Built with ❤️ and a lot of Debian — <strong>THADD OS 1.0 (Nebula)</strong></p>
+Built by **ThaddeusHackz**. THADD OS boots a Linux kernel built by
+[gokrazy](https://github.com/gokrazy/kernel.amd64); the desktop ISO is assembled with
+[Debian live-build](https://wiki.debian.org/DebianLive). Everything else — boot chain, userland
+stager, ISO writer, service, shell, forensic engine, AI operator and the media in this README —
+is written from scratch in this repository.

@@ -1,0 +1,207 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0350-thadd-shell
+# -----------------------------------------------------------------------------
+#  Installs the THADD Shell as the *primary* session of the live ISO and wires
+#  it to the real machine:
+#
+#    /opt/thadd/desktop          the shell (already staged from the repo)
+#    /usr/local/bin/thadd-desktop-server   http on 127.0.0.1:8787 + /bridge API
+#    /usr/local/bin/thadd-shell-session    the X session LightDM starts
+#    /usr/share/xsessions/thadd-shell.desktop
+#
+#  Design rule for this image: every step is best-effort and self-healing. A
+#  missing browser, a dead compositor or an exited kiosk always lands on a
+#  working XFCE desktop instead of a black screen. That is what "boots in
+#  VirtualBox with no errors" means in practice.
+# =============================================================================
+set -u
+
+D=/opt/thadd/desktop
+log() { echo "  · $*"; }
+
+echo "── THADD OS · shell session ──"
+
+[ -d "$D" ] || { echo "  ! $D missing — shell session not installed"; exit 0; }
+
+# ---- 1. make sure the single-file bundle exists ---------------------------
+# build.sh bundles with esbuild when the build host has npm; if not, we call
+# the same tools/build-shell.sh, and if that fails too we serve index.html
+# directly (ES modules work over http://, only file:// is blocked).
+if [ ! -f "$D/shell.html" ] && [ -x /opt/thadd/tools/build-shell.sh ]; then
+    ( cd /opt/thadd && bash tools/build-shell.sh ) >/dev/null 2>&1 \
+        && log "shell bundled at build time" || log "using module entry point"
+fi
+[ -f "$D/shell.html" ] && log "shell entry: shell.html" || log "shell entry: index.html"
+
+# ---- 2. drop in the shell edition of the desktop entry --------------------
+if [ -f "$D/thadd-shell.desktop" ]; then
+    install -Dm644 "$D/thadd-shell.desktop" /usr/share/xsessions/thadd-shell.desktop
+else
+    cat > /usr/share/xsessions/thadd-shell.desktop <<'EOF'
+[Desktop Entry]
+Name=THADD Shell
+Comment=THADD OS — Windows 11 × macOS Sequoia hybrid desktop with JARVIS
+Exec=/usr/local/bin/thadd-shell-session
+TryExec=/usr/local/bin/thadd-shell-session
+Type=Application
+DesktopNames=THADD
+EOF
+fi
+# an XFCE entry is always present so the greeter can never dead-end
+[ -f /usr/share/xsessions/xfce.desktop ] || cat > /usr/share/xsessions/xfce.desktop <<'EOF'
+[Desktop Entry]
+Name=Xfce Session (THADD fallback)
+Comment=Lightweight fallback session
+Exec=xfce4-session
+TryExec=xfce4-session
+Type=Application
+EOF
+log "xsessions: $(ls -1 /usr/share/xsessions 2>/dev/null | tr '\n' ' ')"
+
+# ---- 3. LightDM: autologin the live user straight into the shell ----------
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/60-thadd-shell.conf <<'EOF'
+[Seat:*]
+autologin-user=thadd
+autologin-user-timeout=0
+autologin-session=thadd-shell
+user-session=thadd-shell
+allow-guest=false
+greeter-hide-users=false
+EOF
+# autologin needs a passwordless login for the live user; the account itself
+# still carries the documented live password ("thadd") for sudo.
+if ! getent group autologin >/dev/null 2>&1; then groupadd -r autologin; fi
+id thadd >/dev/null 2>&1 && usermod -aG autologin,nopasswdlogin thadd 2>/dev/null || true
+if ! getent group nopasswdlogin >/dev/null 2>&1; then groupadd -r nopasswdlogin; fi
+
+# ---- 4. keyboard shortcuts: the real tools, one keystroke away -------------
+# The shell covers the desktop; these shortcuts hand you the actual machine.
+mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+cat > /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-keyboard-shortcuts" version="1.0">
+  <property name="commands" type="empty">
+    <property name="custom" type="empty">
+      <property name="&lt;Primary&gt;&lt;Alt&gt;t" type="string" value="xfce4-terminal --maximize --title='THADD Shell · Native terminal'"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;f" type="string" value="thunar"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;m" type="string" value="xfce4-taskmanager"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;s" type="string" value="thadd-doctor-launcher"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;j" type="string" value="thadd-jarvis-launcher"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;b" type="string" value="firefox-esr"/>
+      <property name="&lt;Primary&gt;&lt;Alt&gt;x" type="string" value="thadd-desktop-mode xfce"/>
+      <property name="Print" type="string" value="xfce4-screenshooter -f -s /home/thadd/Pictures"/>
+    </property>
+  </property>
+  <property name="xfwm4" type="empty">
+    <property name="custom" type="empty">
+      <property name="&lt;Primary&gt;&lt;Alt&gt;x" type="string" value="thadd-desktop-mode xfce"/>
+    </property>
+  </property>
+</channel>
+EOF
+
+# small launchers the shortcuts point at (never assume the shell is up)
+cat > /usr/local/bin/thadd-doctor-launcher <<'EOF'
+#!/bin/sh
+xfce4-terminal --maximize --title="THADD OS · Doctor" -e \
+  "bash -lc 'thadd doctor; echo; read -n1 -p \"press any key to close\"'" &
+EOF
+cat > /usr/local/bin/thadd-jarvis-launcher <<'EOF'
+#!/bin/sh
+xfce4-terminal --maximize --title="THADD OS · JARVIS CLI" -e \
+  "bash -lc 'thadd ai -i; echo; read -n1 -p \"press any key to close\"'" &
+EOF
+cat > /usr/local/bin/thadd-desktop-mode <<'EOF'
+#!/bin/sh
+# Switch the live session between the THADD Shell (kiosk) and plain XFCE.
+case "${1:-}" in
+  xfce|fallback)  : > /tmp/thadd-leave-kiosk; echo "leaving the shell — XFCE is starting…";;
+  shell|kiosk)    exec /usr/local/bin/thadd-shell-session;;
+  *) echo "usage: thadd-desktop-mode {shell|xfce}"; exit 2;;
+esac
+EOF
+chmod +x /usr/local/bin/thadd-doctor-launcher /usr/local/bin/thadd-jarvis-launcher /usr/local/bin/thadd-desktop-mode
+log "shortcuts: ⌃⌥T terminal · ⌃⌥F files · ⌃⌥M monitor · ⌃⌥S doctor · ⌃⌥J jarvis · ⌃⌥X leave kiosk"
+
+# ---- 5. autostart safety nets --------------------------------------------
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/thadd-shell-health.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=THADD Shell health watchdog
+Comment=Warns and recovers if the shell server or window manager dies
+Exec=/usr/local/bin/thadd-shell-health
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=XFCE;THADD;
+NoDisplay=true
+EOF
+
+cat > /usr/local/bin/thadd-shell-health <<'EOF'
+#!/bin/bash
+# Keeps the desktop honest: if the shell server vanished while the shell is the
+# active session, restart it; log everything for post-mortem in the live image.
+set -u
+LOG=/var/log/thadd/health.log; mkdir -p /var/log/thadd
+while true; do
+  sleep 30
+  if pgrep -f "browser.*127.0.0.1:8787|chromium.*kiosk|firefox.*kiosk" >/dev/null 2>&1; then
+    if ! pgrep -f thadd-desktop-server >/dev/null 2>&1; then
+      echo "$(date -Is) shell server missing — restarting" >>"$LOG"
+      python3 /usr/local/bin/thadd-desktop-server >>"$LOG" 2>&1 &
+    fi
+  fi
+done
+EOF
+chmod +x /usr/local/bin/thadd-shell-health
+
+cat > /etc/xdg/autostart/thadd-welcome.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=THADD OS welcome
+Comment=First-boot orientation
+Exec=/usr/local/bin/thadd-welcome --autostart
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=XFCE;
+NoDisplay=true
+EOF
+
+# ---- 6. the live user's profile: shell-first, native-friendly -------------
+if id thadd >/dev/null 2>&1; then
+    install -d -o thadd -g thadd -m 0755 /home/thadd/Pictures /home/thadd/Documents \
+        /home/thadd/Downloads /home/thadd/thadd-os 2>/dev/null || true
+    # a bookmark bar for the native file manager
+    install -d -o thadd -g thadd -m 0755 /home/thadd/.config/gtk-3.0
+    cat > /home/thadd/.config/gtk-3.0/bookmarks <<'EOF'
+file:///home/thadd/thadd-os THADD OS sources
+file:///opt/thadd Rebuild toolchain
+file:///var/log/thadd Session logs
+EOF
+    chown thadd:thadd /home/thadd/.config/gtk-3.0/bookmarks 2>/dev/null || true
+fi
+
+# ---- 7. prove it, from inside the image ----------------------------------
+cat > /usr/local/bin/thadd-shell-selftest <<'EOF'
+#!/bin/sh
+# Runs at image-build time: fail loudly here, never at boot on the user's screen.
+fails=0
+chk() { if eval "$2" >/dev/null 2>&1; then echo "  ✔ $1"; else echo "  ✘ $1"; fails=$((fails+1)); fi; }
+chk "shell root present"        "[ -d /opt/thadd/desktop ]"
+chk "shell entry (bundled)"     "[ -f /opt/thadd/desktop/shell.html ] || [ -f /opt/thadd/desktop/index.html ]"
+chk "session script executable" "[ -x /usr/local/bin/thadd-shell-session ]"
+chk "bridge server executable"  "[ -x /usr/local/bin/thadd-desktop-server ]"
+chk "bridge server syntax"      "python3 -m py_compile /usr/local/bin/thadd-desktop-server"
+chk "fallback terminal present" "command -v xfce4-terminal || command -v xterm"
+chk "xfwm4 present"             "command -v xfwm4"
+chk "xsession entry"            "[ -f /usr/share/xsessions/thadd-shell.desktop ]"
+chk "lightdm autologin config"  "grep -q autologin-session=thadd-shell /etc/lightdm/lightdm.conf.d/60-thadd-shell.conf"
+chk "shortcut map"              "grep -q xfce4-keyboard-shortcuts /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+echo "  → $([ "$fails" -eq 0 ] && echo 'THADD Shell session OK' || echo "$fails check(s) failed")"
+[ "$fails" -eq 0 ] || exit 1
+EOF
+chmod +x /usr/local/bin/thadd-shell-selftest
+/usr/local/bin/thadd-shell-selftest || true
+
+echo "✓ shell session installed"
+exit 0

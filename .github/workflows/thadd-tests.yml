@@ -1,0 +1,139 @@
+name: THADD tests
+
+# Fast, offline verification of the parts of THADD OS that are pure logic:
+# the forensics readers, the ISO builders and the UEFI loader. Runs in well
+# under a minute, so it can gate every push.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "arena/**"]
+    paths:
+      - "thadd/**"
+      - "iso/**"
+      - ".github/workflows/thadd-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Forensics + boot builders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc binutils
+          sudo python3 -m pip install --break-system-packages -q pillow pycdlib av imageio-ffmpeg pyyaml
+          python3 -VV
+
+      - name: Shell syntax of every workflow step
+        run: |
+          # A single stray quote inside a run: block silently kills a whole job
+          # (and the failure only shows up host-side, in a log we cannot read).
+          python3 - <<'PYLINT'
+          import subprocess, tempfile, pathlib, yaml, sys
+          bad = 0
+          for wf in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              doc = yaml.safe_load(wf.read_text())
+              for job, jd in (doc.get("jobs") or {}).items():
+                  for step in jd.get("steps") or []:
+                      script = step.get("run")
+                      if not script:
+                          continue
+                      with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as fh:
+                          fh.write(script); path = fh.name
+                      r = subprocess.run(["bash", "-n", path], capture_output=True, text=True)
+                      if r.returncode:
+                          bad += 1
+                          print(f"::error title=workflow shell syntax::{wf.name}/{job}/"
+                                f"{step.get('name')}: {r.stderr.strip().splitlines()[0]}")
+          sys.exit(1 if bad else 0)
+          PYLINT
+
+      - name: The committed shell bundle matches its sources
+        run: |
+          # desktop/js is the source; desktop/bundle/thadd-shell.js is a checked-in
+          # artifact that the ISO ships.  Nothing else notices when the two drift,
+          # and the failure mode is invisible: the image boots an *older* shell
+          # than the repository contains.  Rebuild and require no diff.
+          npm --prefix tools/tests install --silent --no-fund --no-audit
+          bash tools/build-shell.sh
+          if ! git diff --quiet -- desktop/bundle/thadd-shell.js desktop/shell.html; then
+            echo "::error::desktop/bundle/thadd-shell.js is out of date — run: bash tools/build-shell.sh"
+            git diff --stat -- desktop/bundle/thadd-shell.js desktop/shell.html
+            exit 1
+          fi
+          echo "✓ the shipped shell bundle is current"
+
+      - name: Compile every Python module
+        run: |
+          python3 -m compileall -q thadd || (python3 -m compileall thadd; exit 1)
+          # rea ships as an extensionless executable, so compileall never sees it:
+          # compile it by hand and require the version banner to answer.
+          python3 -c "import py_compile,sys; py_compile.compile('reverse-engineering/rea', doraise=True)"
+          ./reverse-engineering/rea --version
+
+      - name: The assistant's entry point actually works
+        run: python3 ai/test_ai.py
+
+      - name: Forensics readers against known images
+        run: python3 thadd/forensics/tests/test_triage.py
+
+      - name: Fetch the kernel for the loader test
+        run: |
+          mkdir -p build/payload
+          curl -fsSL -o build/payload/vmlinuz \
+            https://raw.githubusercontent.com/gokrazy/kernel.amd64/main/vmlinuz
+
+      - name: Build the UEFI loader
+        run: python3 thadd/boot/build_bootloaders.py
+
+      - name: Loader against both mock firmwares (filesystem and raw blocks)
+        run: python3 thadd/boot/tests/run_loader_test.py
+
+      - name: ISO build driver (auto/config + the pre-flight guards)
+        run: sudo python3 iso/tests/test_build_sh.py
+
+      - name: Release publishing safety
+        run: |
+          python3 iso/tests/test_release_publish.py
+          python3 scripts/ci/tests/test_publish_file.py
+
+      - name: Render the desktop gallery and demo video
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub runs every `run:` block as `bash -e`, so a failing assertion
+          # used to end this step *before* the failure report below was written:
+          # the job looked like a flake and the reason stayed on the runner.
+          set +e
+          render_log=/tmp/media-render.log
+          python3 thadd/server/tests/test_render.py 2>&1 | tee "$render_log"
+          status="${PIPESTATUS[0]}"
+          if [ "$status" -ne 0 ]; then
+            mkdir -p docs/reports
+            {
+              echo "# THADD media render - failure"
+              echo
+              echo "The desktop gallery / demo mp4 did not render (exit status \`$status\`)."
+              echo "Reproduce locally with: \`python3 thadd/server/tests/test_render.py\`"
+              echo
+              echo "## Render output"
+              echo
+              echo '```'
+              tail -n 60 "$render_log" 2>/dev/null
+              echo '```'
+              echo
+              echo "## Reproduced from scratch (quick mode)"
+              echo
+              echo '```'
+            } > docs/reports/media-render.md
+            python3 thadd/server/tests/test_render.py --quick >> docs/reports/media-render.md 2>&1 || true
+            echo '```' >> docs/reports/media-render.md
+            bash scripts/ci/publish-file.sh docs/reports/media-render.md \
+              "ci: media render failure report [skip ci]" || true
+          fi
+          exit "$status"

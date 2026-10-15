@@ -1,0 +1,75 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0000-thadd-apt-safe
+#  Installs every optional package set through the tolerant installer.
+#  A missing/renamed package can never fail the build — it is logged instead.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+echo "──────────────────────────────────────────────────────────"
+echo " THADD OS · optional package sets (tolerant install)"
+echo "──────────────────────────────────────────────────────────"
+
+# Test for the file, not for its mode: git only carries the executable bit when
+# it was committed with it, and a 0644 tool silently skipped every optional
+# package set (firmware, dev toolchain, security, forensics, desktop extras).
+if [ -f /opt/thadd/tools/bin/thadd-apt-safe ]; then
+    install -m 0755 /opt/thadd/tools/bin/thadd-apt-safe /usr/local/sbin/thadd-apt-safe
+else
+    echo "thadd-apt-safe not staged — skipping optional sets"; exit 0
+fi
+
+# Fold the repo's optional lists into the image so `thadd-toolbox` can replay
+# them at runtime (useful for rescue/profile rebuilds).
+mkdir -p /usr/share/thadd/packages
+cp -f /opt/thadd/iso-packages/*.txt /usr/share/thadd/packages/ 2>/dev/null || true
+
+# Every set, in a deliberate order, and *all* of them: an earlier version copied
+# only optional-extras.txt into /tmp and then looked for the other five there, so
+# firmware, dev, security, forensics and desktop packages were skipped while the
+# hook still printed "✓ optional sets processed".  A set that cannot be found is
+# now reported loudly instead of being skipped in silence.
+PROCESSED=0
+MISSING=""
+for set in optional-firmware optional-extras optional-dev optional-security optional-forensics optional-desktop optional-browsers; do
+    src="/usr/share/thadd/packages/${set}.txt"
+    if [ ! -f "$src" ]; then
+        MISSING="${MISSING} ${set}"
+        continue
+    fi
+    echo "» set: $set ($(grep -cvE '^[[:space:]]*(#|$)' "$src") packages)"
+    /usr/local/sbin/thadd-apt-safe "$src" || true
+    PROCESSED=$((PROCESSED + 1))
+    # keep the image from ballooning: drop downloaded debs between sets
+    apt-get clean >/dev/null 2>&1 || true
+done
+
+# Keep a durable copy of the installer's report under /usr/share/thadd as well as
+# in /var/log: the verification step reads this out of the shipped squashfs to
+# prove what the sets did, and /var/log is the one tree a live image is free to
+# trim.  ("No log in the image" is indistinguishable from "the sets never ran".)
+mkdir -p /usr/share/thadd
+{
+    echo "THADD OS optional package sets"
+    echo "=============================="
+    for f in apt-safe.log apt-safe-skipped.txt apt-safe-failed.txt; do
+        [ -f "/var/log/thadd/$f" ] || continue
+        echo "--- $f ---"
+        cat "/var/log/thadd/$f"
+    done
+} > /usr/share/thadd/apt-safe-report.txt 2>/dev/null || true
+
+echo "—— optional sets: ${PROCESSED} processed${MISSING:+ · MISSING:${MISSING}}"
+if [ -n "$MISSING" ]; then
+    echo "   (those lists were not staged — check iso/build.sh and iso/config/packages/)"
+fi
+if [ "$PROCESSED" -eq 0 ]; then
+    echo "✗ no optional package set was installed — the image has only the core lists"
+fi
+
+# Runtime lists stay available for on-demand re-install / audit
+cp -f /usr/share/thadd/packages/*.txt /root/ 2>/dev/null || true
+rm -f /root/*.txt 2>/dev/null || true
+
+echo "✓ optional sets processed (see /var/log/thadd/apt-safe*.txt)"
+exit 0

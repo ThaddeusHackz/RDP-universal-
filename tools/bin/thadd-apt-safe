@@ -1,0 +1,80 @@
+#!/bin/bash
+# =============================================================================
+#  thadd-apt-safe — install a list of packages, skipping anything unavailable
+# =============================================================================
+#  A distro build must never die because one tool was renamed upstream. This
+#  helper takes a text file of package names (one per line, # comments, blank
+#  lines and inline "# reason" comments allowed) and installs every package
+#  that actually resolves in the current apt cache:
+#
+#      1. resolve  — apt-cache policy, keep only packages with a real Candidate
+#      2. batch    — one apt-get call for max speed
+#      3. salvage  — if the batch fails (broken dep chain), retry one-by-one
+#      4. report   — everything skipped/failed lands in /var/log/thadd/apt-safe.log
+#
+#  Usage:  thadd-apt-safe <list.txt> [<list2.txt> ...]
+#          thadd-apt-safe --explain <list.txt>
+#  Exit:   always 0 unless the list file is unreadable (build-safety contract)
+# =============================================================================
+set -uo pipefail
+
+LOG_DIR=/var/log/thadd
+LOG="$LOG_DIR/apt-safe.log"
+mkdir -p "$LOG_DIR" 2>/dev/null || LOG=/dev/null
+APT_OPTS=(-y --no-install-recommends -o Acquire::Retries=5 -o Dpkg::Options::=--force-confold)
+
+EXPLAIN=0
+[[ "${1:-}" == "--explain" ]] && { EXPLAIN=1; shift; }
+[[ $# -ge 1 ]] || { echo "usage: thadd-apt-safe [--explain] <list.txt> [...]" >&2; exit 2; }
+
+: >> "$LOG" || true
+say() { printf '%s\n' "$*" | tee -a "$LOG" >&2; }
+
+command -v apt-cache >/dev/null 2>&1 || { say "apt-cache missing — nothing to do"; exit 0; }
+
+# ---- 1. flatten every list into one candidate name set ----------------------
+mapfile -t WANT < <(
+  for f in "$@"; do
+    [[ -r "$f" ]] || { say "list unreadable: $f"; continue; }
+    sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$f"
+  done | grep -v '^$' | sort -u
+)
+[[ ${#WANT[@]} -gt 0 ]] || { echo "nothing to install"; exit 0; }
+
+if ! apt-get update -qq >>"$LOG" 2>&1; then say "apt-get update had errors (continuing)"; fi
+
+AVAILABLE=(); SKIPPED=()
+for pkg in "${WANT[@]}"; do
+  cand="$(apt-cache policy "$pkg" 2>/dev/null | sed -n 's/^  Candidate: //p' | head -1)"
+  if [[ -n "$cand" && "$cand" != "(none)" ]]; then AVAILABLE+=("$pkg"); else SKIPPED+=("$pkg"); fi
+done
+
+say "thadd-apt-safe: ${#AVAILABLE[@]} resolvable / ${#WANT[@]} requested"
+if [[ ${#SKIPPED[@]} -gt 0 ]]; then
+  say "not in any configured repo (skipped): ${SKIPPED[*]}"
+  printf '%s\n' "${SKIPPED[@]}" > "$LOG_DIR/apt-safe-skipped.txt" 2>/dev/null || true
+fi
+if (( EXPLAIN )); then printf '%s\n' "${AVAILABLE[@]}"; exit 0; fi
+[[ ${#AVAILABLE[@]} -gt 0 ]] || { echo "no installable packages"; exit 0; }
+
+# ---- 2. one batch install --------------------------------------------------
+say "installing ${#AVAILABLE[@]} packages in one batch"
+if DEBIAN_FRONTEND=noninteractive apt-get install "${APT_OPTS[@]}" "${AVAILABLE[@]}" >>"$LOG" 2>&1; then
+  say "batch install OK"
+  exit 0
+fi
+
+# ---- 3. salvage: one-by-one, tolerate individual failures ------------------
+say "batch install failed — falling back to per-package install"
+FAILED=(); INSTALLED=0
+for pkg in "${AVAILABLE[@]}"; do
+  if DEBIAN_FRONTEND=noninteractive apt-get install "${APT_OPTS[@]}" "$pkg" >>"$LOG" 2>&1; then
+    INSTALLED=$((INSTALLED+1))
+  else
+    FAILED+=("$pkg")
+    say "  ✗ $pkg (dependency conflict or download failure — skipped)"
+  fi
+done
+say "salvage complete: ${INSTALLED} installed, ${#FAILED[@]} skipped"
+[[ ${#FAILED[@]} -gt 0 ]] && printf '%s\n' "${FAILED[@]}" > "$LOG_DIR/apt-safe-failed.txt" 2>/dev/null
+exit 0

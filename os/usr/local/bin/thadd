@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  THADD OS · control centre  (`thadd`)
+# =============================================================================
+#  The one command the login banner points at, and the front door to everything
+#  else in the image.  Every feature is a *delegation*: this script never
+#  reimplements the tools, it composes them, so there is exactly one
+#  implementation of each capability in the OS.
+#
+#      thadd                     dashboard: system + THADD status at a glance
+#      thadd status              the same, explicitly
+#      thadd doctor              health checks for this live system
+#      thadd security            security posture (what is on, what to change)
+#      thadd scan [--summary]    forensic snapshot  → thadd-scan
+#      thadd dfir <disk|image>   forensic triage of a device → thadd-scan --device
+#      thadd ai [args…]          the assistant      → thadd-ai
+#      thadd rea <file|dir>      reverse-engineer an artefact → rea
+#      thadd toolbox [set|--all] install optional tool sets → thadd-toolbox
+#      thadd update              refresh package lists and list upgradable
+#      thadd welcome             the first-boot screen → thadd-welcome
+#      thadd version             what this image is (build fingerprint)
+#      thadd help                this text
+#
+#  It degrades instead of failing: a missing helper prints what to install and
+#  returns non-zero only for a genuinely unknown command.  That is deliberate -
+#  it is the command a lost user types first.
+# =============================================================================
+set -u
+
+VERSION="$(sed -n 's/^THADD_OS_VERSION=//p' /etc/thadd/build-info 2>/dev/null | head -1)"
+CODENAME="$(sed -n 's/^THADD_OS_CODENAME=//p' /etc/thadd/build-info 2>/dev/null | head -1)"
+# Fall back to THADD's own os-release, not the host distro's version number: on a
+# normal Debian host VERSION_ID is the release number and "THADD OS 12" is not a
+# thing.  THADD OS sets VERSION="1.0 (aurora)" in /etc/os-release.
+if [ -z "$VERSION" ] && grep -q '^ID=thadd' /etc/os-release 2>/dev/null; then
+    VERSION="$( . /etc/os-release 2>/dev/null && printf '%s' "${VERSION:-}" | cut -d' ' -f1 )"
+    CODENAME="$( . /etc/os-release 2>/dev/null && printf '%s' "${VERSION:-}" | sed -n 's/.*(\(.*\)).*/\1/p' )"
+fi
+VERSION="${VERSION:-1.0}"
+CODENAME="${CODENAME:-aurora}"
+BUILD_INFO=/etc/thadd/build-info
+PACKAGE_DIR=/usr/share/thadd/packages
+
+if [ -t 1 ]; then
+    B=$'\033[1m'; D=$'\033[2m'; A=$'\033[38;5;39m'; G=$'\033[38;5;42m'
+    Y=$'\033[38;5;214m'; R=$'\033[38;5;203m'; N=$'\033[0m'
+else
+    B=""; D=""; A=""; G=""; Y=""; R=""; N=""
+fi
+
+have() { command -v "$1" >/dev/null 2>&1; }
+line() { printf '  %s%s%s\n' "$D" "────────────────────────────────────────────────────────────" "$N"; }
+head1() { printf '\n  %s%s%s\n' "$A$B" "$1" "$N"; }
+kv() { printf '  %-16s %s\n' "$1" "$2"; }
+ok() { printf '  %s✓%s %s\n' "$G" "$N" "$1"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$N" "$1"; }
+bad() { printf '  %s✗%s %s\n' "$R" "$N" "$1"; }
+
+# --------------------------------------------------------------------- status
+cmd_status() {
+    printf '  %sTHADD OS %s "%s"%s\n' "$A$B" "$VERSION" "$CODENAME" "$N"
+    line
+    kv "system"   "$( . /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}" || echo unknown )"
+    kv "kernel"   "$(uname -r)  ($(uname -m))"
+    kv "uptime"   "$(uptime -p 2>/dev/null | sed 's/^up //' || echo unknown)"
+    kv "live"     "$( [ -d /run/live ] || [ -d /lib/live ] && echo 'yes — changes live in RAM until you install or enable persistence' || echo 'no (installed system)' )"
+    kv "hostname" "$(hostname)"
+    kv "session"  "${DISPLAY:-${WAYLAND_DISPLAY:-none}}  ${XDG_CURRENT_DESKTOP:-}"
+    kv "user"     "$(id -un) (uid $(id -u))"
+    if [ -f "$BUILD_INFO" ]; then
+        head1 "build"
+        sed 's/^/  /' "$BUILD_INFO"
+    fi
+
+    head1 "resources"
+    if command -v free >/dev/null 2>&1; then
+        kv "memory" "$(free -h | awk '/^Mem:/ {print $3 " used / " $2 " total"}')"
+    fi
+    kv "disk /" "$(df -h / 2>/dev/null | awk 'NR==2 {print $3 " used / " $2 " (" $5 ")"}')"
+    kv "load"   "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
+    kv "cpu"    "$(nproc) core(s)"
+
+    head1 "the OS itself"
+    for cmd in thadd-ai thadd-scan thadd-toolbox thadd-desktop-selftest thadd-ssh thadd-passwd rea; do
+        if have "$cmd"; then ok "$cmd"; else warn "$cmd is not installed"; fi
+    done
+    if [ -x /usr/local/bin/thadd-desktop-selftest ]; then
+        printf '  %s(details: thadd doctor · thadd-desktop-selftest --quiet)%s\n' "$D" "$N"
+    fi
+}
+
+# --------------------------------------------------------------------- doctor
+cmd_doctor() {
+    head1 "THADD doctor"
+    local problems=0
+    line
+    printf '  %sidentity%s\n' "$B" "$N"
+    if grep -q "THADD OS" /etc/os-release 2>/dev/null; then ok "os-release brands this system THADD OS"; else bad "os-release does not say THADD OS"; problems=$((problems+1)); fi
+    [ -f "$BUILD_INFO" ] && ok "build fingerprint present ($(wc -l < "$BUILD_INFO") fields)" || { warn "no /etc/thadd/build-info"; problems=$((problems+1)); }
+
+    printf '\n  %sdesktop%s\n' "$B" "$N"
+    for f in /opt/thadd/desktop/index.html /opt/thadd/desktop/bundle/thadd-shell.js \
+             /usr/local/bin/thadd-shell-session /usr/local/bin/thadd-desktop-server \
+             /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml; do
+        [ -e "$f" ] && ok "present: $f" || { bad "missing: $f"; problems=$((problems+1)); }
+    done
+    for c in xfce4-session xfwm4 picom; do
+        if pgrep -x "$c" >/dev/null 2>&1; then ok "$c is running"
+        elif have "$c"; then warn "$c installed but not running (session may be headless)"
+        else bad "$c is not installed"; problems=$((problems+1)); fi
+    done
+    if have python3; then
+        PYTHONPATH=/opt/thadd/app python3 -c 'import thadd.server.ai.tools' 2>/dev/null \
+            && ok "AI tool registry imports" || { bad "AI tool registry does not import"; problems=$((problems+1)); }
+        PYTHONPATH=/opt/thadd/app python3 -c 'import thadd.forensics.triage' 2>/dev/null \
+            && ok "DFIR engine imports" || { bad "DFIR engine does not import"; problems=$((problems+1)); }
+    fi
+
+    printf '\n  %snetwork%s\n' "$B" "$N"
+    if have nmcli; then
+        local st; st="$(nmcli -t -f STATE g 2>/dev/null | head -1)"
+        [ "${st:-unknown}" = "connected" ] && ok "NetworkManager: connected" || warn "NetworkManager: ${st:-unknown}"
+    else
+        warn "NetworkManager not installed — check /etc/network/interfaces"
+    fi
+    if have ss; then
+        local listeners; listeners="$(ss -ltn 2>/dev/null | awk 'NR>1' | wc -l)"
+        ok "$listeners TCP listener(s)"
+        ss -ltn 2>/dev/null | grep -qE ':8787\b' && ok "THADD bridge listening on 8787" || warn "THADD bridge is not listening on 8787"
+    fi
+    if have ufw; then
+        ufw status 2>/dev/null | head -1 | grep -qi active && ok "firewall: active (ufw)" || warn "firewall is not active (enable: sudo ufw enable)"
+    fi
+
+    printf '\n  %spackages%s\n' "$B" "$N"
+    if [ -d "$PACKAGE_DIR" ]; then
+        ok "$(ls -1 "$PACKAGE_DIR"/*.txt 2>/dev/null | wc -l) optional set list(s) available (thadd toolbox --list)"
+    else
+        warn "no $PACKAGE_DIR — optional sets cannot be replayed"
+    fi
+    [ -f /usr/share/thadd/apt-safe-report.txt ] && ok "installer report present (/usr/share/thadd/apt-safe-report.txt)" \
+                                                 || warn "no installer report — the optional sets may never have run"
+
+    printf '\n  %sassistant%s\n' "$B" "$N"
+    if [ -n "${GROQ_API_KEY:-}" ]; then ok "Groq API key present in the environment"
+    else warn "no GROQ_API_KEY — the assistant runs offline (set it in Settings → AI, or export it)"; fi
+    if have thadd-ai; then
+        thadd-ai selftest --quiet >/dev/null 2>&1 && ok "thadd-ai selftest passes" || warn "thadd-ai selftest reported a problem (run: thadd-ai selftest)"
+    else
+        bad "thadd-ai is not installed"; problems=$((problems+1))
+    fi
+
+    line
+    if [ "$problems" -eq 0 ]; then
+        printf '  %sNo problems found.%s\n' "$G" "$N"
+    else
+        printf '  %s%d problem(s) found%s — each line above says what is missing.\n' "$Y" "$problems" "$N"
+    fi
+    if [ -x /usr/local/bin/thadd-desktop-selftest ]; then
+        printf '  %sFull desktop audit: thadd-desktop-selftest%s\n' "$D" "$N"
+    fi
+    return 0
+}
+
+# ------------------------------------------------------------------- security
+cmd_security() {
+    head1 "THADD security posture"
+    line
+    if [ -f /etc/thadd/security-posture ]; then sed 's/^/  /' /etc/thadd/security-posture; else warn "no /etc/thadd/security-posture"; fi
+
+    printf '\n  %slive checks%s\n' "$B" "$N"
+    if have ufw; then
+        ufw status verbose 2>/dev/null | sed -n '1,6p' | sed 's/^/  /'
+    else
+        warn "ufw not installed"
+    fi
+    local aa="unknown"
+    if [ -r /sys/module/apparmor/parameters/enabled ]; then
+        aa="$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)"
+    fi
+    kv "AppArmor" "$aa"
+    kv "ASLR" "$(cat /proc/sys/kernel/randomize_va_space 2>/dev/null)"
+    kv "kptr_restrict" "$(cat /proc/sys/kernel/kptr_restrict 2>/dev/null)"
+    kv "ptrace_scope" "$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null)"
+    if command -v systemctl >/dev/null 2>&1; then
+        kv "auditd" "$(systemctl is-active auditd 2>/dev/null || echo unknown)"
+        kv "ssh" "$(systemctl is-active ssh 2>/dev/null || echo 'off (thadd-ssh on)')"
+    fi
+    if id -nG 2>/dev/null | grep -qw sudo; then kv "sudo" "$(id -un) may sudo (logged to /var/log/thadd/sudo.log)"; fi
+    printf '\n  %sFull detail, and how to undo any of it: /usr/share/doc/thadd/SECURITY.md%s\n' "$D" "$N"
+    [ -x /usr/local/bin/thadd-scan ] && printf '  %sForensic snapshot of this machine: thadd scan%s\n' "$D" "$N"
+    return 0
+}
+
+# ------------------------------------------------------------------ delegation
+delegate() { # delegate <command> <fallback message> [args…]
+    local cmd="$1" msg="$2"; shift 2
+    if have "$cmd"; then exec "$cmd" "$@"; fi
+    warn "$cmd is not installed — $msg"
+    return 0
+}
+
+cmd_scan()   { delegate thadd-scan   "the forensic scanner is missing from this image" "$@"; }
+cmd_dfir()   {
+    if [ $# -eq 0 ]; then
+        bad "thadd dfir needs a target:  thadd dfir /dev/sdX   or   thadd dfir evidence.img"
+        return 2
+    fi
+    delegate thadd-scan "the forensic scanner is missing from this image" --device "$@"
+}
+cmd_ai()     { delegate thadd-ai     "the assistant is missing from this image" "$@"; }
+cmd_toolbox(){ delegate thadd-toolbox "the toolbox installer is missing from this image" "$@"; }
+cmd_rea()    { delegate rea "the reverse-engineering tool is missing from this image" "$@"; }
+
+cmd_welcome(){
+    if have thadd-welcome; then exec thadd-welcome "$@"; fi
+    cmd_status
+}
+
+cmd_update() {
+    head1 "THADD update"
+    if ! have apt-get; then bad "apt is not available on this system"; return 1; fi
+    if [ "$(id -u)" -ne 0 ]; then
+        warn "refreshing package lists needs root"
+        printf '  Try: sudo thadd update\n'
+        return 1
+    fi
+    printf '  %sRefreshing package lists…%s\n' "$D" "$N"
+    # Capture the output and the status separately: `apt-get update | tail` always
+    # reports success, because a pipeline's exit status is the *last* command's.
+    local up_out up_rc=0
+    up_out="$(apt-get update -qq 2>&1)" || up_rc=$?
+    printf '%s\n' "$up_out" | tail -5 | sed 's/^/  /'
+    if [ "$up_rc" -eq 0 ]; then ok "package lists refreshed"; else warn "apt-get update reported errors (rc $up_rc)"; fi
+    if command -v apt >/dev/null 2>&1; then
+        local n; n="$(apt list --upgradable 2>/dev/null | grep -c upgradable || true)"
+        printf '\n  %s%d package(s) upgradable%s\n' "$B" "${n:-0}" "$N"
+        apt list --upgradable 2>/dev/null | grep upgradable | head -15 | sed 's/^/  /'
+    fi
+    cat <<EOF
+
+  ${D}This is live media: upgrades live in RAM and vanish at reboot.${N}
+  ${D}To keep them, install the system (see docs/QUICKSTART.md) or enable persistence.${N}
+EOF
+    return 0
+}
+
+cmd_version() {
+    printf 'THADD OS %s "%s"\n' "$VERSION" "$CODENAME"
+    if [ -f "$BUILD_INFO" ]; then sed 's/^/  /' "$BUILD_INFO"; else printf '  (no build fingerprint on this system)\n'; fi
+    printf '  shell bundle: %s\n' "$( [ -f /opt/thadd/desktop/bundle/thadd-shell.js ] && echo "present ($(du -h /opt/thadd/desktop/bundle/thadd-shell.js | cut -f1))" || echo absent )"
+    printf '  tools: '
+    for c in thadd-ai thadd-scan thadd-toolbox thadd-ssh thadd-passwd rea; do have "$c" && printf '%s ' "$c"; done
+    printf '\n'
+    return 0
+}
+
+cmd_help() {
+    printf '\n  %sTHADD OS %s "%s" — control centre%s\n' "$A$B" "$VERSION" "$CODENAME" "$N"
+    line
+    cat <<EOF
+  ${B}thadd${N}                     this dashboard (status at a glance)
+  ${B}thadd status${N}              the same, explicitly
+  ${B}thadd doctor${N}              health checks: desktop, AI, network, packages
+  ${B}thadd security${N}            security posture, and what to change
+  ${B}thadd scan${N} [--summary]    forensic snapshot of this running system
+  ${B}thadd dfir${N} <disk|image>   forensic triage of a device or disk image
+  ${B}thadd ai${N} [args…]          the AI assistant (thadd-ai chat|ask|doctor)
+  ${B}thadd rea${N} <file|dir>    reverse-engineer an artefact → rea
+  ${B}thadd toolbox${N} [set|--all] install optional tool sets on demand
+  ${B}thadd update${N}              refresh package lists, list upgradable
+  ${B}thadd welcome${N}             the first-boot screen
+  ${B}thadd version${N}             what this image is (build fingerprint)
+  ${B}thadd help${N}                this text
+EOF
+    line
+    printf '  %sDocs: /usr/share/doc/thadd/ (QUICKSTART · SECURITY · AI · FORENSIC_SCAN · REA)%s\n\n' "$D" "$N"
+    return 0
+}
+
+# ------------------------------------------------------------------------- main
+case "${1:-}" in
+    ""|status|dashboard)  cmd_status ;;
+    doctor|health)        cmd_doctor ;;
+    security|secure)      cmd_security ;;
+    scan|forensics)       shift; cmd_scan "$@" ;;
+    dfir|triage)          shift; cmd_dfir "$@" ;;
+    ai|assistant|jarvis)  shift; cmd_ai "$@" ;;
+    rea|reverse|re)       shift; cmd_rea "$@" ;;
+    toolbox|tools)        shift; cmd_toolbox "$@" ;;
+    update|upgrade)       cmd_update ;;
+    welcome)              shift; cmd_welcome "$@" ;;
+    version|-v|--version) cmd_version ;;
+    help|-h|--help)       cmd_help ;;
+    *)
+        bad "unknown command: $1"
+        cmd_help
+        exit 2
+        ;;
+esac

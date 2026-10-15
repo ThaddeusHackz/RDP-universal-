@@ -82,6 +82,7 @@ jobs:
       - name: Publish screenshot proof
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/ci/publish-screenshot.sh
 
       - name: Upload screenshot artifact

@@ -1,0 +1,469 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  THADD OS — ISO build driver
+# =============================================================================
+#  Turns the repository into a bootable, hybrid (BIOS + UEFI) live ISO that
+#  runs identically in VirtualBox, VMware, QEMU/KVM and on bare metal.
+#
+#  Usage:
+#      sudo ./iso/build.sh                    # full build -> dist/*.iso
+#      sudo ./iso/build.sh --clean            # purge previous build tree
+#      sudo ./iso/build.sh --profile desktop   # desktop | minimal
+#
+#  Requires (on the build host, NOT in this repo's sandbox):
+#      apt-get install live-build debootstrap xorriso squashfs-tools \
+#                      mtools dosfstools rsync
+#
+#  The same script is what .github/workflows/iso-build.yml runs on a clean
+#  ubuntu runner — so a local build and a CI build produce the same artefact.
+# =============================================================================
+set -Eeuo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ISO_DIR="$REPO_ROOT/iso"
+DIST_DIR="$REPO_ROOT/dist"
+PROFILE="${THADD_PROFILE:-desktop}"
+VERSION="${THADD_VERSION:-$(date -u +%Y.%m.%d)}"
+CODENAME="$(sed -n 's/^THADD_CODENAME=//p' "$ISO_DIR/version.env" 2>/dev/null || true)"
+CODENAME="${CODENAME:-aurora}"
+
+C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_ACC=$'\033[38;5;39m'
+C_OK=$'\033[38;5;42m'; C_WARN=$'\033[38;5;214m'; C_ERR=$'\033[38;5;203m'
+
+log()  { printf '%s[thadd-iso]%s %s\n' "$C_ACC" "$C_RESET" "$*"; }
+ok()   { printf '%s  ✓%s %s\n' "$C_OK" "$C_RESET" "$*"; }
+warn() { printf '%s  !%s %s\n' "$C_WARN" "$C_RESET" "$*"; }
+die()  { printf '%s  ✗ %s%s\n' "$C_ERR" "$*" "$C_RESET" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --clean)   rm -rf "$ISO_DIR/.build" "$ISO_DIR"/config/{binary,chroot,bootstrap,common,source} \
+                      "$ISO_DIR"/*.iso "$ISO_DIR"/*.list 2>/dev/null || true
+               ok "build tree purged"; shift ;;
+    --profile) PROFILE="$2"; shift 2 ;;
+    --no-install-deps) NO_DEPS=1; shift ;;
+    -h|--help) sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# 0. Preconditions
+# ---------------------------------------------------------------------------
+[[ "$(id -u)" == "0" ]] || die "run as root (live-build needs mount/chroot): sudo $0"
+[[ "$(uname -m)" == "x86_64" ]] || die "ISO builds are amd64-only for now"
+
+if [[ "${NO_DEPS:-0}" != "1" ]]; then
+  missing=()
+  for t in lb debootstrap xorriso mksquashfs rsync; do command -v "$t" >/dev/null || missing+=("$t"); done
+  if (( ${#missing[@]} )); then
+    log "installing build deps: ${missing[*]}"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq live-build debootstrap xorriso squashfs-tools mtools dosfstools rsync \
+      isolinux syslinux-common grub-efi-amd64-bin grub-pc-bin >/dev/null
+  fi
+  command -v lb >/dev/null || die "live-build not available"
+fi
+
+log "THADD OS ${VERSION} (${CODENAME}) · profile=${PROFILE} · $(nproc) cores"
+mkdir -p "$DIST_DIR"
+
+# ---------------------------------------------------------------------------
+# 1. Assemble the chroot overlay (includes.chroot) from the repo.
+#    live-build does not follow symlinks outside config/, so we COPY the real
+#    source trees into the overlay. This is the step that makes the repo and
+#    the shipped ISO the *same* artefact — no drift, no vendoring.
+# ---------------------------------------------------------------------------
+OVERLAY="$ISO_DIR/config/includes.chroot"
+log "staging overlay -> $(realpath --relative-to="$REPO_ROOT" "$OVERLAY" 2>/dev/null || echo "$OVERLAY")"
+
+stage() { # stage <src-relative-to-repo> <dest-in-image>
+  local src="$REPO_ROOT/$1" dest="$OVERLAY/$2"
+  [[ -e "$src" ]] || { warn "skip staging $1 (missing)"; return 0; }
+  mkdir -p "$dest"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  # The target directory is created first and the source is spelled `src/.`
+  # with a `dest/` target, so the *contents* always land in dest - regardless of
+  # how rsync interprets a destination that does not exist yet.  Getting this
+  # wrong is silent and brutal: an earlier build shipped
+  # /opt/thadd/tools/tools/bin/thadd-apt-safe and /etc/skel/skel/.config, so
+  # every hook looked in the right place and found nothing (the desktop profile
+  # was skipped as "not staged" and the live user's session files never applied).
+  rsync -a --exclude 'node_modules/' --exclude '__pycache__/' --exclude '*.pyc' \
+        --exclude 'bundle.js' --exclude '*.log' --exclude '.git/' \
+        --exclude 'package-lock.json' "$src"/. "$dest"/
+  # Scripts must arrive executable: git only carries the exec bit when the file
+  # was committed with it, and a 0644 tool inside the ISO is a broken promise
+  # (it silently disabled the optional-package installer for two releases).
+  find "$dest" -type f \( -name '*.sh' -o -name '*.hook' -o -name 'thadd*' -o -path '*/bin/*' \) \
+    -exec chmod 0755 {} + 2>/dev/null || true
+  ok "$1 -> /$2"
+}
+
+# The image's own pointers must not dangle: the login banner says "Docs:
+# /usr/share/doc/thadd/", and /etc/thadd/security-posture sends the reader to
+# /usr/share/doc/thadd/SECURITY.md.  Those files had never been staged, so every
+# pointer in every release went nowhere.
+if [[ -d "$REPO_ROOT/docs" ]]; then
+  mkdir -p "$OVERLAY/usr/share/doc/thadd"
+  cp -f "$REPO_ROOT"/docs/*.md "$OVERLAY/usr/share/doc/thadd/" 2>/dev/null || true
+  # QUICKSTART/SECURITY/AI live in docs/, but they send the reader on to the
+  # forensic method and to the reverse-engineering tool, so both come along.
+  cp -f "$REPO_ROOT/FORENSIC_SCAN.md" "$OVERLAY/usr/share/doc/thadd/" 2>/dev/null || true
+  cp -f "$REPO_ROOT/reverse-engineering/README.md" "$OVERLAY/usr/share/doc/thadd/REA.md" 2>/dev/null || true
+  if [[ -f "$OVERLAY/usr/share/doc/thadd/SECURITY.md" ]]; then
+    ok "documentation -> /usr/share/doc/thadd ($(ls -1 "$OVERLAY/usr/share/doc/thadd" | wc -l) files: $(ls -1 "$OVERLAY/usr/share/doc/thadd" | tr '\n' ' '))"
+  else
+    warn "no docs/*.md to stage — the image's documentation pointers will dangle"
+  fi
+fi
+
+# THADD identity + tooling
+stage os/etc      etc
+stage os/usr/local usr/local          # thadd-shell-session + /bridge server
+stage cloud/skel  etc/skel            # XFCE fallback profile (panel, dock, prompt)
+stage ai       opt/thadd/ai
+stage desktop  opt/thadd/desktop
+stage security opt/thadd/security
+stage tools    opt/thadd/tools
+stage reverse-engineering opt/thadd/reverse-engineering
+# The assistant and the DFIR engine are pure standard library, so the whole
+# stack rides along: /usr/local/bin/thadd-ai and thadd-scan are thin wrappers
+# around it (35 tools, no pip, no venv, works on a live ISO with no network).
+# NB: the destination keeps a `thadd/` level - rsync copies the *contents* of
+# the source, and python needs the package directory itself on PYTHONPATH.
+stage thadd    opt/thadd/app/thadd
+
+# The staged tree is what the hooks and the live session will read: check the
+# layout instead of trusting the copy (see the comment in stage()).
+check_overlay() { # check_overlay <path-in-image> <description>
+  if [[ -e "$OVERLAY/$1" ]]; then
+    ok "overlay: /$1"
+  else
+    echo "  ✗ the staged overlay is missing /$1 ($2)" >&2
+    echo "  --- what is actually in the overlay ---" >&2
+    ( cd "$OVERLAY" && find . -maxdepth 4 | sort | sed 's/^/      /' | head -60 ) >&2 || true
+    die "ISO overlay layout is wrong (see the listing above)"
+  fi
+}
+
+log "verifying the staged overlay"
+check_overlay "etc/skel/.config" "the live user's desktop profile"
+check_overlay "usr/local/bin/thadd-shell-session" "the session launcher"
+check_overlay "opt/thadd/tools/bin/thadd-apt-safe" "the tolerant package installer"
+check_overlay "opt/thadd/desktop/index.html" "the desktop shell"
+# desktop/shell.html loads bundle/thadd-shell.js by name - if that bundle is ever
+# missing (it was dropped once by a snapshot that excludes dist/), the desktop
+# would start to a blank page with no error anywhere.  Fail the build instead.
+check_overlay "opt/thadd/desktop/bundle/thadd-shell.js" "the bundled desktop shell"
+check_overlay "opt/thadd/ai/thadd-ai.py" "the AI assistant"
+check_overlay "opt/thadd/security/thadd-scan" "the security suite"
+check_overlay "usr/share/doc/thadd/SECURITY.md" "the security baseline docs"
+check_overlay "usr/share/doc/thadd/QUICKSTART.md" "the quick start docs"
+check_overlay "opt/thadd/desktop/thadd-desktop-selftest" "the desktop self-test"
+check_overlay "usr/local/bin/thadd-ai" "the AI assistant launcher"
+check_overlay "usr/local/bin/thadd-scan" "the forensic scanner launcher"
+check_overlay "opt/thadd/app/thadd/server/ai/cli.py" "the agent CLI"
+check_overlay "opt/thadd/app/thadd/server/ai/agent.py" "the agent loop"
+check_overlay "opt/thadd/app/thadd/server/ai/tools.py" "the agent tool registry"
+check_overlay "opt/thadd/app/thadd/forensics/triage.py" "the DFIR engine"
+for doubled in etc/skel/skel usr/local/local opt/thadd/tools/tools opt/thadd/ai/ai \
+                opt/thadd/desktop/desktop opt/thadd/app/thadd/thadd; do
+  [[ -e "$OVERLAY/$doubled" ]] && die "the overlay is nested one level too deep: /$doubled exists (staging copied the directory instead of its contents)"
+done
+ok "overlay layout is correct (no nested copies)"
+
+# Optional package sets (installed inside the chroot by thadd-apt-safe)
+mkdir -p "$OVERLAY/opt/thadd/iso-packages"
+cp -f "$ISO_DIR"/config/packages/*.txt "$OVERLAY/opt/thadd/iso-packages/" 2>/dev/null \
+  && ok "package sets -> /opt/thadd/iso-packages ($(ls -1 "$OVERLAY/opt/thadd/iso-packages" | wc -l) lists)" \
+  || warn "no package set lists found"
+
+# The desktop profile ships the full hybrid theme + AI assistant; the minimal
+# profile is a rescue/forensic image (~700 MB) with terminals only.
+if [[ "$PROFILE" == "minimal" ]]; then
+  rm -rf "$OVERLAY/opt/thadd/desktop/theme" 2>/dev/null || true
+fi
+
+# /etc/skel gets the hybrid desktop look for every new user
+if [[ -d "$OVERLAY/opt/thadd/desktop/skel" ]]; then
+  mkdir -p "$OVERLAY/etc/skel"
+  cp -a "$OVERLAY/opt/thadd/desktop/skel/." "$OVERLAY/etc/skel/"
+  ok "skel -> /etc/skel"
+fi
+
+# Build fingerprint: the ISO and the OS can always prove what they were built from
+# (the directory has to exist before the redirect: with `set -e` a failed
+#  redirect used to end the build here, before live-build ever started)
+mkdir -p "$OVERLAY/etc/thadd"
+{
+  echo "THADD_OS_VERSION=${VERSION}"
+  echo "THADD_OS_CODENAME=${CODENAME}"
+  echo "THADD_OS_PROFILE=${PROFILE}"
+  echo "THADD_OS_COMMIT=${GITHUB_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
+  echo "THADD_OS_BUILT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OVERLAY/etc/thadd/build-info"
+
+# ---------------------------------------------------------------------------
+# 2. Configure + build
+# ---------------------------------------------------------------------------
+cd "$ISO_DIR"
+export THADD_PROFILE="$PROFILE" THADD_VERSION="$VERSION"
+
+# hooks must be executable — live-build runs .hook.chroot files directly
+find "$ISO_DIR/config/hooks" -name '*.hook.chroot' -exec chmod 0755 {} + 2>/dev/null || true
+
+log "lb config"
+rm -rf config/binary config/chroot config/bootstrap config/common 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 1a. The configuration lives in iso/auto/config - and its *location* is part
+#     of the contract: live-build reads ./auto/config from the build directory
+#     (lb_config(1), FILES).  It used to sit at iso/config/auto/config, one
+#     directory too deep, so live-build never read it and silently used its own
+#     defaults: the build bootstrapped Debian 11 (20230502's default suite) with
+#     a main-only archive area, and died an hour later on retired mirrors and on
+#     firmware packages that live in non-free-firmware.
+#
+#     The script is therefore run explicitly: its flags land on the command
+#     line, which is the one input live-build always honours (command line >
+#     environment > defaults).  The exports below repeat the release-critical
+#     settings as a second line of defence, and every one of them is verified in
+#     1c against the files `lb build` itself sources.
+# ---------------------------------------------------------------------------
+[[ -f auto/config ]] || die "iso/auto/config is missing - live-build would build with its own defaults"
+chmod +x auto/config 2>/dev/null || true
+
+export LB_DISTRIBUTION="bookworm"
+export LB_PARENT_DISTRIBUTION="bookworm"
+export LB_ARCHITECTURE="amd64"
+export LB_ARCHIVE_AREAS="main contrib non-free non-free-firmware"
+export LB_PARENT_ARCHIVE_AREAS="main contrib non-free non-free-firmware"
+export LB_MIRROR_CHROOT="http://deb.debian.org/debian/"
+export LB_MIRROR_CHROOT_SECURITY="http://security.debian.org/debian-security/"
+export LB_MIRROR_BINARY="http://deb.debian.org/debian/"
+export LB_MIRROR_BINARY_SECURITY="http://security.debian.org/debian-security/"
+export LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"
+
+if ! ./auto/config; then
+  die "iso/auto/config failed (see its output above)"
+fi
+ok "iso/auto/config applied (every flag on the lb config command line)"
+
+# Refuse to spend an hour bootstrapping the wrong release.
+if grep -rqs "bullseye" config/ 2>/dev/null; then
+  echo "  ✗ live-build still wants bullseye:" >&2
+  grep -rn "bullseye" config/ 2>/dev/null | head -5 >&2
+  die "live-build configuration is for the wrong Debian release (expected bookworm)"
+fi
+ok "suite is bookworm (live-build 20230502's default is bullseye - it is pinned here)"
+
+# ---------------------------------------------------------------------------
+# 1b. Trust nothing: pin the values that decide whether the build can succeed,
+#     then dump what live-build actually kept.  A wrong suite, an obsolete
+#     mirror or a main-only archive area only shows up at the very end of a
+#     45-minute build, so they are checked here - in seconds.
+# ---------------------------------------------------------------------------
+dump_config() {
+  local f
+  for f in config/common config/bootstrap config/chroot config/binary config/source; do
+    [[ -f "$f" ]] || continue
+    echo "  --- $f"
+    grep -E '^[A-Z_]+=' "$f" | sed 's/^/      /' || true
+  done
+}
+
+force() { # force <VAR> <value>   - rewrite it in every config file that declares it
+  local var="$1" val="$2" f
+  for f in config/bootstrap config/common config/chroot config/binary; do
+    [[ -f "$f" ]] || continue
+    if grep -q "^$var=" "$f"; then
+      sed -i "s|^$var=.*|$var=\"$val\"|" "$f"
+    fi
+  done
+}
+
+if [[ -f config/bootstrap ]]; then
+  force LB_DISTRIBUTION "bookworm"
+  force LB_PARENT_DISTRIBUTION "bookworm"
+  force LB_MIRROR_CHROOT "http://deb.debian.org/debian/"
+  force LB_MIRROR_CHROOT_SECURITY "http://security.debian.org/debian-security/"
+  force LB_MIRROR_BINARY "http://deb.debian.org/debian/"
+  force LB_MIRROR_BINARY_SECURITY "http://security.debian.org/debian-security/"
+  force LB_MIRROR_BOOTSTRAP "http://deb.debian.org/debian/"
+  ok "suite + mirrors pinned to bookworm"
+else
+  warn "no config/bootstrap after lb config - live-build printed its own diagnostics above"
+fi
+
+log "effective live-build configuration"
+dump_config
+
+# 1c. The release-critical settings, in the files lb build sources.
+bad_config=0
+require() { # require <file> <egrep-pattern> <description>
+  local file="$1" pat="$2" what="$3"
+  if grep -qE "$pat" "$file" 2>/dev/null; then
+    ok "$what"
+  else
+    printf '  ✗ %s does not carry: %s\n' "$file" "$pat" >&2
+    bad_config=1
+  fi
+}
+require config/bootstrap '^LB_DISTRIBUTION="bookworm"'                       "suite: bookworm"
+require config/bootstrap '^LB_ARCHIVE_AREAS=".*non-free-firmware'            "archive areas: main contrib non-free non-free-firmware"
+require config/bootstrap '^LB_PARENT_ARCHIVE_AREAS=".*non-free-firmware'     "bootstrap mirror archive areas: non-free-firmware"
+require config/bootstrap '^LB_MIRROR_BOOTSTRAP="http://deb.debian.org/debian/"' "bootstrap mirror reachable (deb.debian.org)"
+require config/binary  '^LB_BOOTLOADERS=".*grub-efi'                         "UEFI bootloader: grub-efi"
+require config/binary  '^LB_BOOTLOADERS=".*syslinux'                         "BIOS bootloader: syslinux"
+require config/binary  '^LB_BOOTAPPEND_LIVE=".*boot=live'                    "live boot parameters (boot=live ...)"
+require config/binary  '^LB_COMPRESSION="xz"'                                "squashfs compression: xz"
+require config/binary  '^LB_ISO_VOLUME="THADD_OS"'                           "ISO volume label: THADD_OS"
+require config/common  '^LB_IMAGE_NAME="THADD-OS'                            "image name: THADD-OS-<version>"
+require config/common  '^LB_INITSYSTEM="systemd"'                            "init system: systemd"
+if (( bad_config )); then
+  echo "  --- what live-build actually kept ---" >&2
+  dump_config >&2
+  die "live-build did not keep what iso/auto/config declares (dump above)"
+fi
+ok "every release-critical setting is in place (dump above)"
+
+log "lb build  (this is the long one — 15-45 min depending on cores/disk)"
+: > "$DIST_DIR/build.log"
+if ! lb build 2>&1 | tee -a "$DIST_DIR/build.log"; then
+  tail -n 60 "$DIST_DIR/build.log" >&2 || true
+  die "lb build failed — full log: dist/build.log"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Collect, checksum, publish-ready naming
+# ---------------------------------------------------------------------------
+ISO_SRC="$(ls -1 "$ISO_DIR"/*.hybrid.iso "$ISO_DIR"/*.iso 2>/dev/null | head -1 || true)"
+[[ -f "$ISO_SRC" ]] || die "no ISO produced"
+
+ISO_OUT="$DIST_DIR/THADD-OS-${VERSION}-${CODENAME}-amd64.iso"
+mv -f "$ISO_SRC" "$ISO_OUT"
+SIZE_MB=$(( $(stat -c%s "$ISO_OUT") / 1024 / 1024 ))
+ok "ISO: $(basename "$ISO_OUT")  (${SIZE_MB} MiB)"
+
+( cd "$DIST_DIR" && sha256sum "$(basename "$ISO_OUT")" > "$(basename "$ISO_OUT").sha256" )
+ok "sha256 written"
+
+# ---------------------------------------------------------------------------
+# 3b. Prove the artefact before anyone can publish it
+# ---------------------------------------------------------------------------
+# The same verifier CI runs on the runner: it reads the boot records, walks the
+# ISO layout, unpacks the squashfs and asserts the shipped contents (identity,
+# desktop profile, session, assistant, scanner, toolchain).  Until now a green
+# build only proved that live-build exited 0 - it never proved the ISO was
+# bootable or that it contained the OS.  A build that cannot prove itself is not
+# a build we publish, so this dies rather than warn.
+if [[ "${THADD_SKIP_VERIFY:-0}" == "1" ]]; then
+  warn "THADD_SKIP_VERIFY=1 — not verifying the ISO"
+elif command -v xorriso >/dev/null 2>&1 && command -v unsquashfs >/dev/null 2>&1; then
+  log "verifying the ISO (iso/verify.sh)"
+  VERIFY_LOG="$DIST_DIR/verify.log"
+  set +e
+  bash "$ISO_DIR/verify.sh" "$ISO_OUT" > "$VERIFY_LOG" 2>&1
+  VERIFY_RC=$?
+  set -e
+  cat "$VERIFY_LOG" >> "$DIST_DIR/build.log"
+  # The verdict line is checked as well as the exit status: a verifier that
+  # somehow returns 0 without saying SHIPPABLE is a broken gate, not a pass.
+  if (( VERIFY_RC != 0 )); then
+    tail -n 40 "$VERIFY_LOG" >&2
+    die "the ISO did not pass verification (exit $VERIFY_RC) — full log: dist/verify.log; not publishing it"
+  fi
+  grep -q "RESULT: SHIPPABLE" "$VERIFY_LOG" \
+    || die "the verifier exited 0 but never reported RESULT: SHIPPABLE — not publishing it"
+  ok "the ISO verifies: boot records, layout and shipped contents all check out"
+else
+  warn "xorriso/unsquashfs are missing — the ISO was built but not verified"
+fi
+
+# GitHub release assets are capped at 2 GiB — split so ANY build can ship.
+if (( SIZE_MB > 1900 )); then
+  log "splitting for release (>1900 MiB)"
+  ( cd "$DIST_DIR" && split -b 1900M -d --suffix-length=2 "$(basename "$ISO_OUT")" "$(basename "$ISO_OUT").part-" \
+    && ls -1 "$(basename "$ISO_OUT").part-"* | xargs sha256sum > parts.sha256 )
+  ok "parts ready: $(ls -1 "$DIST_DIR"/*.part-* | wc -l)"
+fi
+
+cat > "$DIST_DIR/RELEASE-NOTES.md" <<EOF
+## THADD OS ${VERSION} "${CODENAME}" — amd64 live/installable ISO
+
+- Profile: \`${PROFILE}\`
+- Size: ${SIZE_MB} MiB
+- Boots: Legacy BIOS **and** UEFI (hybrid ISO) — VirtualBox, VMware, QEMU/KVM, bare metal
+- Verify: \`sha256sum -c $(basename "$ISO_OUT").sha256\`
+
+\`\`\`bash
+# VirtualBox quick start
+VBoxManage createvm --name "THADD OS" --ostype Debian_64 --register
+VBoxManage modifyvm  "THADD OS" --memory 4096 --cpus 2 --vram 128 --graphicscontroller vmsvga --firmware efi
+VBoxManage createhd    --filename "$HOME/THADD-OS/disk.vdi" --size 40960
+VBoxManage storagectl  "THADD OS" --name "SATA" --add sata --controller IntelAhci --portcount 2
+VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 0 --device 0 --type hdd --medium "$HOME/THADD-OS/disk.vdi"
+VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 1 --device 0 --type dvddrive --medium "$PWD/$(basename "$ISO_OUT")"
+VBoxManage startvm "THADD OS"
+\`\`\`
+EOF
+
+# The release body.  The publish step in .github/workflows/iso-build.yml reads
+# dist/README.txt and falls back to a single line when it is absent - which is why
+# every release so far described the desktop disc with one sentence while a 5.6 GB
+# download sat beside it in three parts.  Write the whole story here.
+cat > "$DIST_DIR/README.txt" <<EOF
+THADD OS ${VERSION} "${CODENAME}" — the desktop live system
+==========================================================================
+Debian-live, hybrid BIOS + UEFI, with the THADD Hybrid Shell (Windows 11 geometry
+x macOS Sequoia material), the browser set, the dev toolchain, the security and
+forensics tool sets, and an AI operator that can read and edit the whole machine.
+
+This disc        ${SIZE_MB} MiB · boots on VirtualBox, VMware, QEMU/KVM and bare metal
+File here        $(basename "$ISO_OUT")
+Verify           sha256sum -c $(basename "$ISO_OUT").sha256
+
+$(if (( SIZE_MB > 1900 )); then cat <<SPLIT
+GitHub caps one release asset at 2 GiB, so this image is uploaded in parts.  Join
+them before booting:
+
+  cat $(basename "$ISO_OUT").part-* > $(basename "$ISO_OUT")
+  sha256sum -c parts.sha256
+
+SPLIT
+fi)
+Boot it (VirtualBox, EFI)
+  VBoxManage createvm --name "THADD OS" --ostype Debian_64 --register
+  VBoxManage modifyvm  "THADD OS" --memory 4096 --cpus 2 --vram 128 \
+      --graphicscontroller vmsvga --firmware efi --accelerate3d on
+  VBoxManage storagectl  "THADD OS" --name "SATA" --add sata --controller IntelAhci --portcount 2
+  VBoxManage storageattach "THADD OS" --storagectl "SATA" --port 0 --device 0 \
+      --type dvddrive --medium "$PWD/$(basename "$ISO_OUT")"
+  VBoxManage startvm "THADD OS"
+
+Inside
+  thadd                  the control centre (doctor, security, status, scan, dfir, ai, toolbox)
+  thadd ai               the assistant; add a Groq key for cloud reasoning, it works offline too
+  thadd rea <file>       reverse-engineer one artefact: identify, unpack, strings, report
+  rea --help             the same tool directly
+  /usr/share/doc/thadd/  QUICKSTART · SECURITY · AI · FORENSIC_SCAN · REA
+
+Live media keeps every change in RAM: install to disk from the desktop, or boot
+with the THADD-PERSISTENCE volume to keep changes across reboots.
+
+How this build was checked
+  The image is unpacked and read back — boot menus, kernel, initramfs, the shipped
+  documentation, every command the login banner advertises, the optional-package
+  installer's own report — and it tests itself from the inside while it is built
+  (/etc/thadd/selfcheck.txt, read out of the shipped squashfs).  The full report is
+  committed to docs/reports/desktop-iso-verify.md in the repository.  That is a
+  statement about the *contents* of this image: the machine that builds it cannot
+  boot a VM, so the first real boot happens on yours.
+EOF
+
+printf '\n'
+log "done — artefacts in dist/"
+ls -lh "$DIST_DIR" | sed 's/^/    /'

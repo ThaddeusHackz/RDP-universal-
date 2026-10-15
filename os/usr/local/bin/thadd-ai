@@ -1,0 +1,28 @@
+#!/bin/sh
+# =============================================================================
+#  THADD AI — the operating system's assistant, on the command line.
+#
+#  Same agent and the same 35 tools the desktop shell talks to over the bridge:
+#  read/write/edit/search files, run commands, analyse disks, manage packages
+#  and services, drive the GUI.  Needs nothing but python3 — the whole stack is
+#  staged at /opt/thadd/app, no pip, no venv, no network for the offline path.
+#
+#      thadd-ai                          interactive session
+#      thadd-ai "free up 5 GB in /var"   one-shot task
+#      thadd-ai doctor | models | selftest
+#
+#  Give it a Groq key to unlock cloud reasoning:  export GROQ_API_KEY=…  or
+#  Settings → AI in the desktop shell.  Without one it still does real work
+#  locally (the offline assistant), which is what a live ISO has to do.
+# =============================================================================
+set -u
+THADD_LIB="${THADD_LIB:-/opt/thadd/app}"
+case ":${PYTHONPATH:-}:" in *":$THADD_LIB:"*) ;; *) PYTHONPATH="$THADD_LIB${PYTHONPATH:+:$PYTHONPATH}" ;; esac
+# running from a checkout (not the image)? then the repo root is three levels up
+if [ ! -d "$THADD_LIB/thadd" ]; then
+  repo="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd || true)"
+  [ -n "$repo" ] && [ -d "$repo/thadd" ] && THADD_LIB="$repo" && PYTHONPATH="$THADD_LIB"
+fi
+export PYTHONPATH
+if [ -f /etc/thadd/ai.conf ]; then . /etc/thadd/ai.conf; fi
+exec python3 -m thadd.server.ai.cli "$@"

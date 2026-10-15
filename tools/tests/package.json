@@ -1,0 +1,16 @@
+{
+  "name": "thadd-os-tests",
+  "private": true,
+  "type": "module",
+  "description": "Head-less verification harness for the THADD OS desktop shell. `npm install` pulls esbuild + jsdom; nothing here ships in the ISO.",
+  "scripts": {
+    "bundle": "node bundle.mjs",
+    "smoke": "node smoke.mjs",
+    "deep": "node deep.mjs",
+    "test": "node bundle.mjs && node smoke.mjs && node deep.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2",
+    "jsdom": "^25.0.1"
+  }
+}

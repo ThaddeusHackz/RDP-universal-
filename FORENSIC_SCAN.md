@@ -1,168 +1,139 @@
-# 🔍 THADD OS — Pre-Build Forensic Scan Report
+# THADD OS — forensic scan
 
-**Scan date:** 2026-08-19 · **Scanner:** `scripts/forensic-scan.sh` (shipped with this repo)
-**Target:** `ThaddeusHackz/RDP-universal-` — the legacy repository contents
-**Disposition:** target purged per repository-owner directive; THADD OS built in its place.
+THADD OS treats a disk the way an examiner does: **read it, never trust it, and
+write down how you know what you know.** Two things live in this repository:
 
-> **Follow-up (2026-08-19):** a second, RDP-login-specific forensic pass found why
-> the published credentials still failed to log anyone in. See
-> [`docs/RDP_LOGIN_FORENSICS.md`](docs/RDP_LOGIN_FORENSICS.md) (findings + fixes)
-> and [`docs/FORENSIC_SCAN_CURRENT.md`](docs/FORENSIC_SCAN_CURRENT.md) (raw rescan,
-> including the RDP login-path audit — every check PASS).
+* **the engine** — `thadd/forensics/`, dependency-free readers plus a triage
+  pass that reverse-engineers an operating system out of a disk image; and
+* **this document** — the method, the commands, and where the technique comes
+  from.
+
+> **Method reference.** The agent-driven reverse-engineering approach used here —
+> look at the artefact, form a hypothesis, verify it against the binary, and only
+> then claim it — follows **[morluto/rea](https://github.com/morluto/rea)**
+> ("Reverse Engineered Anything"), an MCP-based toolkit for reverse engineering
+> binaries, applications and runtime behaviour down to the byte level.
+> REA is the reference implementation for *how* to analyse; THADD OS implements
+> the same discipline for *storage* — partition tables, filesystem structures,
+> registry hives and deleted records — with readers written from scratch against
+> the published on-disk formats, so the media never has to be mounted.
 
 ---
 
-## 0. Executive Summary
+## 1. What the engine reads
 
-The legacy repository contained a single GitHub Actions workflow
-(`.github/workflows/main.yml`) that provisioned a throwaway **Windows** RDP
-box on a GitHub-hosted runner, wired it into a **Tailscale** overlay network,
-created an administrator account with a generated password, opened Windows
-Firewall on **port 3389**, and idled for up to 60 hours.
+| Reader | File | What it understands |
+| --- | --- | --- |
+| Partition schemes | `partitions.py` | MBR, extended/EBR chains, GPT (primary + backup), protective MBR, CRC validation, type GUIDs, super-floppy volumes |
+| FAT | `fat.py` | FAT12/16/32 + exFAT, VFAT long names, cluster chains, deleted entries (`0xE5`), volume labels, EFI System Partition layout |
+| NTFS | `ntfs.py` | boot sector, `$MFT` parsing, runlists, resident + non-resident attributes, alternate data streams, deleted MFT records, FILETIME |
+| ext4 | `ext4.py` | superblock, group descriptors, inodes, extents, directory entries, deletions, journal recovery hints |
+| HFS+ | `hfs.py` | volume header, catalog B-tree, extents overflow, Unicode names |
+| APFS | `apfs.py` | container superblock, checkpoint descriptors, volume superblocks, snapshots |
+| Windows registry | `registry.py` | hive files (`SAM`, `SYSTEM`, `SOFTWARE`, `SECURITY`, `NTUSER.DAT`), cells, keys/values, mojibake-safe string decoding |
+| Device layer | `device.py` | read-only block devices and files, sliced access (partition windows), streaming hashes, zero/entropy tests |
+| Triage | `triage.py` | the report: evidence, partitions, filesystems, OS verdict with confidence, artifacts, timeline, indicators, acquisition plan |
 
-**Forensic findings at a glance**
+## 2. Run a scan
 
-| Finding | Severity | Detail |
-|---|---|---|
-| CI secret reference | Low | `${{ secrets.TAILSCALE_AUTH_KEY }}` — not embedded, referenced safely |
-| Privileged account creation | Medium | local admin `RDP` created on the runner |
-| Firewall + service tampering | Medium | registry edits + `netsh` rules + `TermService` restart |
-| Remote installer fetch | Medium | MSI pulled from `pkgs.tailscale.com` |
-| Long-running resource squat | Low | `while ($true) { Start-Sleep 300 }` keep-alive loop |
-| No embedded credentials in tree | — | clean |
+**On the live system** (or any machine with Python 3 and this repository):
 
-**Composite risk score: 35/100 — MODERATE.**
-
-No secrets were leaked; the patterns flagged are typical of disposable
-remote-access automation, but they belong to a transient CI runner rather
-than a real operating system. THADD OS replaces this with a proper,
-container-native Linux desktop: deterministic, health-checked, persistent
-and CI-verified.
-
-## 1. Methodology
-
-The scan performed, over the entire working tree **and full git history**:
-
-- **Cryptographic inventory** — SHA-256 of every file with size, MIME type and mtime
-- **Entropy audit** — byte-level Shannon entropy to surface keys, ciphertext and packed blobs
-- **Secret pattern database** — 17 regex families (AWS, GitHub PATs, Slack, OpenAI, DB DSNs, private keys, passwords…)
-- **Git forensics** — author identity, commit timeline, full-history secret re-scan
-- **Network I/O extraction** — every URL and IPv4 literal
-- **Behavioral profiling** — registry/firewall/service/VPN/RDP/execution capabilities
-- **Risk scoring** — composite model (secrets +30, >5 external URLs +15, high-entropy blobs +15, remote-exec +20)
-
-The scanner itself is reproducible: `scripts/forensic-scan.sh <target> <output>`.
-
-## 2. Target Acquisition (raw data)
-
-| **Scan timestamp (UTC)** | `2026-08-19T01:05:03Z` |
-| **Target path** | `/home/user/RDP-universal-` |
-| **Target type** | `` |
-| **Total size** | `128K` |
-| **Regular files** | `1` |
-| **Directories** | `4` |
-| **Symlinks** | `0` |
-| **Git repository** | `true` |
-
-| Files hashed | 1 |
-| Bytes analyzed | 4876 |
-
-```csv
-"path","size_bytes","sha256","mime","entropy_bits","mtime"
-".github/workflows/main.yml","4876","b9773d3267c108ff6e95c42a9fec8bb0bea2ea0f91a3bf1dd30bcf98039eb187","ext:yml","4.66","2026-08-19 00:54:01"
+```bash
+thadd dfir /dev/sdX                # reverse-engineer a whole disk
+thadd dfir /evidence/disk.E01      # or an image file
+python3 -m thadd.forensics.cli /dev/sdX --out ./case-2026-10-13
 ```
 
-### 3. Content-Type Profile
+**Through the THADD service** (the desktop's *Forensics Lab* app and the AI
+operator use the same call):
 
-| ext:yml | 1 |
-
-### 4. Secrets & Credential Scan
-
-No embedded credentials detected in working tree.
-
-**Secret references in code (CI variables):**
-
-```
-/home/user/RDP-universal-/.github/workflows/main.yml:72:${{ secrets.TAILSCALE_AUTH_KEY }}
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/security.analyze_image \
+     -H 'Content-Type: application/json' \
+     -d '{"path": "/dev/sdX", "deep": true}' | python3 -m json.tool | head -40
 ```
 
-### 5. Network I/O & External Endpoints
+**From Python:**
 
-
-**URLs / domains:**
-
-```
-https://facebook.github.io/watchman/
-https://github.com/ThaddeusHackz/RDP-universal-
-https://github.com/ThaddeusHackz/RDP-universal-.git
-https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi
+```python
+from thadd.forensics import triage
+report = triage.analyze("/dev/sdX", deep=True, progress=print)
+print(triage.report_markdown(report))          # human-readable
+print(triage.save_report(report, "./case"))   # JSON + markdown onto disk
 ```
 
-**IPv4 addresses:**
+## 3. Reverse-engineering an artefact — `rea`
 
-```
-```
+A disk scan answers "what was this machine". The other half of the job is a single
+file: a binary, an installer, a browser extension, a suspicious Electron app.
+`rea` (in `reverse-engineering/`, installed to `/usr/local/bin/rea` by the image)
+does that pass, and the banner has promised it since the first release:
 
-### 6. High-Entropy Blob Audit (potential embedded keys/ciphertext)
-
-
-| entropy | file |
-|---|---|
-
-### 7. Git History Forensics
-
-
-**Commits:**
-
-```
-1d8d99e | ThaddeusHackz <tthaddeus75@gmail.com> | 2025-12-08 15:58:26 +0000 | Create main.yml
+```bash
+rea suspicious.AppImage            # what is it, and what should I do next?
+rea --strings plugin.crx           # URLs, keys, paths, commands it carries
+rea --unpack archive.zip           # recursive: ZIP, tar, ar/deb, gzip/bz2/xz, ASAR
+rea --electron Resources/app.asar  # unpack an Electron app, read package.json + main.js
+rea --report sample.bin            # markdown for an examiner or for the AI operator
+rea --identify sample.bin --json   # the same facts, machine-readable
 ```
 
-**Author frequency:**
+It is standard library only, so it works on a live ISO with no network and no
+extra packages; the optional helpers (`7z`, `binwalk`, `unsquashfs`, `upx`,
+`monodis`) are used when present and *named* when absent, together with the
+`thadd-toolbox` command that installs them. It reads the artefact and never
+executes it, and it refuses to write outside its output directory — see
+`reverse-engineering/README.md` for the full statement of limits.
+
+## 4. What a report contains
 
 ```
-     1	ThaddeusHackz <tthaddeus75@gmail.com>
+evidence        sha256, size, device-or-file, chain of custody, report hash
+partition_table scheme, disk id/guid, protective MBR, warnings (CRC, backup GPT)
+partitions      number, offset in bytes, size, type, bootable, type guid, uid
+filesystems     per partition: FAT / exFAT / NTFS / ext4 / HFS+ / APFS or "unknown"
+os_detected     family, distro, release, confidence, and the evidence behind it
+artifacts       windows / macos / linux / firmware structures that carry history
+timeline        timestamps found, oldest to newest
+indicators      things an examiner should look at twice
+acquisition_plan what to image, verify and carve - always produced
+stats           partitions, filesystems, artifacts, entropy, elapsed time
 ```
 
-**Diff stat (all history):**
+Everything is **read-only**: `device.py` opens with `O_RDONLY` and never seeks
+with write intent. A scan never mounts a filesystem, so it works on evidence that
+the host itself cannot mount — an APFS container on Linux, an NTFS volume with a
+broken `$MFT`, a disk with a deliberately damaged partition table.
 
-```
-1d8d99e Create main.yml
- .github/workflows/main.yml | 113 +++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 113 insertions(+)
-```
+## 5. Regression tests
 
-**Git-object-level secret scan (all history):**
+The readers are verified against images with known content, not against
+themselves:
 
-```
-59:+          $password = -join ($rawPassword | Sort-Object { Get-Random })
-60:+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-65:+          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+```bash
+python3 thadd/forensics/tests/test_triage.py
 ```
 
-### 8. Behavioral & Capability Analysis
+The suite builds a FAT16 volume with `mkfat.FatImage`, wraps it in an MBR and in
+a GPT, then checks that the engine reports the right scheme, the right partition
+offset, the right filesystem *and* — for the file-level readers — that the bytes
+of a multi-cluster file, a nested directory and a real deleted entry come back
+exactly as written. It also feeds the engine 3 KB of random data and requires it
+to say "Unknown" instead of inventing an operating system.
 
+> Those tests earned their keep immediately: they caught a FAT12/16 reader bug
+> where the data area was computed without the fixed root directory, so every
+> cluster read came out of the wrong part of the volume. Fixed in `fat.py`, with
+> the cluster-chain test above as the guard.
 
-| Capability | Evidence in target |
-|---|---|
-| Windows registry modification | 1 file(s) matched |
-| Firewall rule manipulation | 1 file(s) matched |
-| Service control / persistence | 1 file(s) matched |
-| Overlay VPN / tunnel | 1 file(s) matched |
-| Remote Desktop Protocol (port 3389) | 1 file(s) matched |
-| Long-running / keep-alive loop | 1 file(s) matched |
-| Local user & group creation (privilege escalation) | 1 file(s) matched |
-| Permission widening | none |
-| Remote payload fetch | 1 file(s) matched |
-| Code execution / encoding | 1 file(s) matched |
+## 6. Honesty rules the engine follows
 
-### 9. Risk Assessment
-
-**Composite risk score: 35/100** (MODERATE)
-
-* Scoring: embedded secrets +30, >5 external URLs +15, high-entropy blobs +15, remote-execution primitives +20.
-
-### 10. Investigator Verdict
-
-**Target purged and replaced.** THADD OS now stands where the legacy workflow stood — see `README.md`.
-The artifact found was a Windows GitHub-Actions RDP/Tailscale runner workflow.
+1. **No invention.** If the structure is not recognised, it says `unknown` and
+   recommends carving — it does not guess a filesystem from a stray signature.
+2. **Confidence, not certainty.** Every OS verdict carries a score and lists the
+   evidence that produced it (`_fingerprint`).
+3. **Evidence first.** The hash of the target is taken before anything else is
+   read deeply and stored in the report; the report itself is hashed too, so a
+   later edit is detectable.
+4. **Warnings are content.** CRC mismatches, phantom GPT entries, a missing
+   backup table and unreadable regions are reported, never swallowed.

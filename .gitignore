@@ -1,11 +1,33 @@
-# local scratch
-node_modules/
-*.log
-.tmp/
-
-# keep the CI-published screenshot in the repo
-!ci/thadd-os-screenshot.jpg
+# ---------------------------------------------------------------------------
+# build output - the kernel, the staged rootfs, the initramfs and the ISO are
+# all reproducible with the scripts in thadd/boot/, so they never get committed
+# (the released .iso lives in GitHub Releases, built by CI).
+# ---------------------------------------------------------------------------
+build/
+dist/
+out/
 
 # python
 __pycache__/
 *.pyc
+
+# test harness
+tools/tests/node_modules/
+tools/tests/bundle.js
+tools/tests/package-lock.json
+
+# live-build writes these into iso/ every run (iso/auto/config is the source of
+# truth, and the build asserts what lb kept).  Committing them would freeze one
+# machine's generated config into the repository.
+iso/config/common
+iso/config/bootstrap
+iso/config/chroot
+iso/config/binary
+iso/config/source
+iso/config/includes.chroot
+iso/config/*.log
+iso/cache/
+iso/chroot/
+iso/binary/
+iso/.build/
+iso/*.hybrid.iso

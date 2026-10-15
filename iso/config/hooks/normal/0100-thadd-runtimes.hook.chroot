@@ -1,0 +1,79 @@
+#!/bin/sh
+# =============================================================================
+#  THADD OS · 0100-thadd-runtimes
+#  Modern language runtimes that Debian's frozen archive cannot provide:
+#    · Node.js 22 LTS  — required by REA (rea-agents) and the AI console
+#    · npm globals     — rea-agents, typescript, ts-node, pnpm, eslint …
+#    · pipx tooling    — shell-gpt, httpie, thefuck, yt-dlp …
+#  Everything is best-effort: the ISO must still build offline-ish.
+# =============================================================================
+set -u
+export DEBIAN_FRONTEND=noninteractive
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+NODE_MAJOR=22
+NODE_VER="22.20.0"
+
+echo "── THADD OS · runtimes ──"
+
+# ---- Node.js -------------------------------------------------------------
+need_node=1
+if command -v node >/dev/null 2>&1; then
+    cur="$(node -v 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/')"
+    [ "${cur:-0}" -ge 20 ] 2>/dev/null && need_node=0
+fi
+
+if [ "$need_node" = 1 ]; then
+    arch="$(dpkg --print-architecture)"
+    url="https://nodejs.org/dist/v${NODE_VER}/node-v${NODE_VER}-linux-${arch}.tar.xz"
+    if curl -fsSL --retry 3 --connect-timeout 20 "$url" -o /tmp/node.tar.xz 2>/dev/null; then
+        mkdir -p /usr/local/lib/nodejs
+        tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs 2>/dev/null \
+          && ln -sf "/usr/local/lib/nodejs/node-v${NODE_VER}-linux-${arch}/bin/node" /usr/local/bin/node \
+          && ln -sf "/usr/local/lib/nodejs/node-v${NODE_VER}-linux-${arch}/bin/npm"  /usr/local/bin/npm \
+          && ln -sf "/usr/local/lib/nodejs/node-v${NODE_VER}-linux-${arch}/bin/npx"  /usr/local/bin/npx \
+          && echo "✓ Node.js $(node -v) installed to /usr/local"
+        rm -f /tmp/node.tar.xz
+    else
+        echo "! nodejs.org unreachable — falling back to the distro package"
+        apt-get install -y --no-install-recommends nodejs npm >/dev/null 2>&1 || true
+    fi
+fi
+
+# ---- npm global tools ----------------------------------------------------
+if command -v npm >/dev/null 2>&1; then
+    export NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false
+    npm install -g --no-audit --no-fund --loglevel=error \
+        rea-agents typescript ts-node pnpm yarn eslint prettier \
+      >/dev/null 2>&1 && echo "✓ npm globals: rea-agents typescript ts-node pnpm yarn eslint prettier" \
+      || echo "! npm global install partially failed (non-fatal)"
+    # REA is the reverse-engineering MCP this distro ships first-class.
+    if command -v rea >/dev/null 2>&1; then
+        echo "✓ REA available: $(rea --version 2>/dev/null || echo installed)"
+    fi
+fi
+
+# ---- pipx CLI tooling ----------------------------------------------------
+if command -v pipx >/dev/null 2>&1; then
+    export PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin PIPX_DEFAULT_PYTHON=/usr/bin/python3
+    for pkg in yt-dlp httpie thefuck pgcli glances; do
+        pipx install "$pkg" >/dev/null 2>&1 || true
+    done
+    echo "✓ pipx CLIs staged in /opt/pipx"
+fi
+
+# ---- Go / Rust: offer, do not bloat the ISO ------------------------------
+cat > /usr/local/bin/thadd-runtimes <<'EOS'
+#!/bin/bash
+# Install heavyweight runtimes on demand (kept out of the ISO to stay lean).
+set -u
+case "${1:-}" in
+  go)     ver="${2:-1.22.5}"; curl -fsSL "https://go.dev/dl/go${ver}.linux-amd64.tar.gz" | tar -C /usr/local -xz && echo "go ${ver} -> /usr/local/go" ;;
+  rust)   curl -fsSL https://sh.rustup.rs | sh -s -- -y && echo "rust -> ~/.cargo" ;;
+  pwntools|volatility3|angr|frida) python3 -m pip install --break-system-packages "$1" ;;
+  *)      echo "usage: thadd-runtimes {go|rust|pwntools|volatility3|angr|frida} [version]" ;;
+esac
+EOS
+chmod +x /usr/local/bin/thadd-runtimes
+
+echo "✓ runtimes stage complete"
+exit 0

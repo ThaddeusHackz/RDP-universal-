@@ -1,0 +1,102 @@
+# THADD OS — virtualisation guests, AI runtime glue and hardware support
+# (optional; installed through thadd-apt-safe so gaps are harmless)
+# ---------------------------------------------------------------------------
+# --- VirtualBox / VMware / QEMU guests: makes the ISO "just work" in a VM ---
+virtualbox-guest-utils
+virtualbox-guest-x11
+open-vm-tools
+open-vm-tools-desktop
+spice-vdagent
+qemu-guest-agent
+xserver-xorg-video-vmware
+xserver-xorg-video-qxl
+xserver-xorg-video-cirrus
+xserver-xorg-video-fbdev
+xserver-xorg-video-vesa
+xserver-xorg-input-vmmouse
+xserver-xorg-input-synaptics
+xserver-xorg-input-libinput
+xserver-xorg-input-wacom
+# --- Removable media / printing / scanning ---
+udisks2
+udiskie
+pmount
+exfatprogs
+exfat-fuse
+ntfs-3g
+dosfstools
+f2fs-tools
+cifs-utils
+nfs-common
+sshfs
+squashfs-tools
+cups
+cups-client
+system-config-printer
+simple-scan
+sane-utils
+# --- Sound / bluetooth / cameras ---
+bluez
+bluez-tools
+pulseaudio-module-bluetooth
+pipewire
+pipewire-pulse
+wireplumber
+cheese
+guvcview
+# --- AI / assistant support ---
+gir1.2-gtk-3.0
+gir1.2-webkit2-4.1
+gir1.2-glib-2.0
+gir1.2-notify-0.7
+gir1.2-ayatanaappindicator3-0.1
+python3-gi
+python3-gi-cairo
+python3-dbus
+python3-requests
+python3-websocket
+python3-aiohttp
+python3-sounddevice
+python3-pyaudio
+python3-speechrecognition
+espeak-ng
+espeak-ng-data
+festival
+festvox-en1
+pocketsphinx
+pocketsphinx-en-us
+cmusphinx-en-us
+speech-dispatcher
+speech-dispatcher-espeak-ng
+orca
+tesseract-ocr-eng
+translate-shell
+ripgrep
+fzf
+xdotool
+wmctrl
+# --- Browsers and apps that only exist in a vendor's own repository ---
+# (google-chrome-stable, microsoft-edge-stable, brave-browser, VS Code and
+#  PowerShell are installed by 0450-thadd-thirdparty-tools from Google's,
+#  Microsoft's and Brave's archives; Opera/Vivaldi/Slack/Discord/Zoom/Spotify
+#  have no apt repository we can rely on and are deliberately left out.)
+# --- Office / docs / misc productivity ---
+libreoffice-writer
+libreoffice-calc
+libreoffice-impress
+libreoffice-gtk3
+mousepad
+evince
+okular
+foliate
+calibre
+thunderbird
+remmina
+remmina-plugin-rdp
+remmina-plugin-vnc
+freerdp2-x11
+tigervnc-viewer
+vinagre
+filezilla
+transmission-gtk
+qbittorrent

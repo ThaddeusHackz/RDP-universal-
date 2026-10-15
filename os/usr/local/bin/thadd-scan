@@ -1,0 +1,24 @@
+#!/bin/sh
+# =============================================================================
+#  THADD Scan — a forensic snapshot of this machine (read-only).
+#
+#      thadd-scan                       fingerprint the running system, save report
+#      thadd-scan --summary             just the verdict
+#      thadd-scan --json                machine-readable evidence
+#      thadd-scan --device /dev/sdX     triage a disk / image (THADD DFIR engine)
+#
+#  Live-system work is done by /opt/thadd/security/thadd-scan; disk and image
+#  work goes through the THADD DFIR readers staged at /opt/thadd/app (the same
+#  engine as `thadd dfir`, informed by morluto/rea).  Nothing is mounted or
+#  modified: the target is opened read-only and never written to.
+# =============================================================================
+set -u
+THADD_LIB="${THADD_LIB:-/opt/thadd/app}"
+case ":${PYTHONPATH:-}:" in *":$THADD_LIB:"*) ;; *) PYTHONPATH="$THADD_LIB${PYTHONPATH:+:$PYTHONPATH}" ;; esac
+# running from a checkout (not the image)? then the repo root is three levels up
+if [ ! -d "$THADD_LIB/thadd" ]; then
+  repo="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd || true)"
+  [ -n "$repo" ] && [ -d "$repo/thadd" ] && THADD_LIB="$repo" && PYTHONPATH="$THADD_LIB"
+fi
+export PYTHONPATH
+exec python3 /opt/thadd/security/thadd-scan "$@"

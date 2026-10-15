@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  THADD OS · thadd-welcome
+#  First thing the live user sees when the shell is not available (rescue boot,
+#  serial console, no-browser fallback). Prints the machine, the toolbox and the
+#  three commands worth knowing, then gets out of the way.
+# =============================================================================
+set -u
+C_ACC=$'\033[38;5;45m'; C_DIM=$'\033[2m'; C_OK=$'\033[38;5;42m'; C_RST=$'\033[0m'
+printf '\n%s' "$C_ACC"
+cat <<'BANNER'
+   ████████╗██╗  ██╗ █████╗ ██████╗ ██████╗      ██████╗ ███████╗
+   ╚══██╔══╝██║  ██║██╔══██╗██╔══██╗██╔══██╗    ██╔═══██╗██╔════╝
+      ██║   ███████║███████║██║  ██║██║  ██║    ██║   ██║███████╗
+      ██║   ██╔══██║██╔══██║██║  ██║██║  ██║    ██║   ██║╚════██║
+      ██║   ██║  ██║██║  ██║██████╔╝██████╔╝    ╚██████╔╝███████║
+      ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═════╝      ╚═════╝ ╚══════╝
+BANNER
+printf '%s' "$C_RST"
+# Never hardcode the release name here: it said "THADD OS 2.0 Nebula Prime" while
+# the image identified itself as 2026.10 "aurora" in /etc/os-release and
+# /etc/thadd/build-info.  Ask the OS what it is.
+VERSION_LINE="$(thadd version 2>/dev/null | head -1)"
+[ -n "$VERSION_LINE" ] || VERSION_LINE="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-THADD OS}")"
+[ -n "$VERSION_LINE" ] || VERSION_LINE="THADD OS (development tree)"
+printf '  %s%s — One OS. Every Capability.%s\n\n' "$C_OK" "$VERSION_LINE" "$C_RST"
+printf '  %sbuild%s   %s\n' "$C_DIM" "$C_RST" "$(sed -n 's/^THADD_OS_//p' /etc/thadd/build-info 2>/dev/null | tr '\n' ' ' || echo '(dev tree)')"
+printf '  %skernel%s  %s   %scpu%s %s   %smem%s %s\n' "$C_DIM" "$C_RST" "$(uname -r)" \
+  "$C_DIM" "$C_RST" "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')" \
+  "$C_DIM" "$C_RST" "$(awk '/MemTotal/{printf "%.1f GiB", $2/1048576}' /proc/meminfo)"
+printf '  %sip%s      %s   %suser%s %s\n\n' "$C_DIM" "$C_RST" \
+  "$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | head -1 || echo offline)" \
+  "$C_DIM" "$C_RST" "$(id -un)"
+
+cat <<'NEXT'
+  Start here
+    thadd                 status at a glance (doctor, security, ai, scan, toolbox)
+    thadd doctor          verify the whole OS (services, desktop, network, toolbox)
+    thadd ai              JARVIS in the terminal — set GROQ_API_KEY first
+    thadd toolbox         install the offensive/RE tool sets on demand
+    thadd help            every command, grouped
+
+  Desktop
+    The THADD Shell (Windows 11 × macOS Sequoia hybrid) starts automatically.
+    Leave it for plain XFCE at any time:            thadd-desktop-mode xfce
+    Back to the shell:                              thadd-desktop-mode shell
+    Native terminal ⌃⌥T · files ⌃⌥F · monitor ⌃⌥M · doctor ⌃⌥S · JARVIS ⌃⌥J
+
+  Persistence
+    Boot the ISO with the "THADD-PERSISTENCE" volume and everything survives.
+NEXT
+
+if [ "${1:-}" = "--autostart" ] && command -v xterm >/dev/null 2>&1; then
+  xterm -fa Monospace -fs 11 -geometry 100x30 -T "THADD OS" -e \
+    "bash -lc 'cat /etc/motd; echo; exec bash -l'" &
+fi
+exit 0
